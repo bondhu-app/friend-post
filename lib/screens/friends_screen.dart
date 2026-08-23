@@ -10,8 +10,7 @@ class FriendsScreen extends StatefulWidget {
       _FriendsScreenState();
 }
 
-class _FriendsScreenState
-    extends State<FriendsScreen> {
+class _FriendsScreenState extends State<FriendsScreen> {
   final FirebaseAuth _auth =
       FirebaseAuth.instance;
 
@@ -39,19 +38,18 @@ class _FriendsScreenState
     }
 
     try {
-      final existingRequest =
-          await _firestore
-              .collection('friendRequests')
-              .where(
-                'senderId',
-                isEqualTo: user.uid,
-              )
-              .where(
-                'receiverId',
-                isEqualTo: targetUid,
-              )
-              .limit(1)
-              .get();
+      final existingRequest = await _firestore
+          .collection('friendRequests')
+          .where(
+            'senderId',
+            isEqualTo: user.uid,
+          )
+          .where(
+            'receiverId',
+            isEqualTo: targetUid,
+          )
+          .limit(1)
+          .get();
 
       if (existingRequest.docs.isNotEmpty) {
         _showMessage(
@@ -60,10 +58,9 @@ class _FriendsScreenState
         return;
       }
 
-      final request =
-          _firestore
-              .collection('friendRequests')
-              .doc();
+      final request = _firestore
+          .collection('friendRequests')
+          .doc();
 
       await request.set({
         'requestId': request.id,
@@ -101,9 +98,7 @@ class _FriendsScreenState
   }
 
   Future<void> _acceptRequest(
-    DocumentSnapshot<
-            Map<String, dynamic>>
-        request,
+    DocumentSnapshot<Map<String, dynamic>> request,
   ) async {
     final user = _auth.currentUser;
 
@@ -121,26 +116,26 @@ class _FriendsScreenState
         (data['senderId'] ?? '').toString();
 
     if (senderId.isEmpty) {
+      _showMessage(
+        'Invalid friend request.',
+      );
       return;
     }
 
     try {
-      final batch =
-          _firestore.batch();
+      final batch = _firestore.batch();
 
-      final currentUserFriend =
-          _firestore
-              .collection('users')
-              .doc(user.uid)
-              .collection('friends')
-              .doc(senderId);
+      final currentUserFriend = _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('friends')
+          .doc(senderId);
 
-      final senderFriend =
-          _firestore
-              .collection('users')
-              .doc(senderId)
-              .collection('friends')
-              .doc(user.uid);
+      final senderFriend = _firestore
+          .collection('users')
+          .doc(senderId)
+          .collection('friends')
+          .doc(user.uid);
 
       batch.set(
         currentUserFriend,
@@ -193,9 +188,7 @@ class _FriendsScreenState
   }
 
   Future<void> _declineRequest(
-    DocumentSnapshot<
-            Map<String, dynamic>>
-        request,
+    DocumentSnapshot<Map<String, dynamic>> request,
   ) async {
     try {
       await request.reference.update({
@@ -229,13 +222,13 @@ class _FriendsScreenState
       return;
     }
 
-    final confirmed =
-        await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title:
-              const Text('Remove Friend'),
+          title: const Text(
+            'Remove Friend',
+          ),
           content: const Text(
             'Are you sure you want to remove this friend?',
           ),
@@ -246,8 +239,9 @@ class _FriendsScreenState
                   dialogContext,
                 ).pop(false);
               },
-              child:
-                  const Text('Cancel'),
+              child: const Text(
+                'Cancel',
+              ),
             ),
             FilledButton(
               onPressed: () {
@@ -255,8 +249,9 @@ class _FriendsScreenState
                   dialogContext,
                 ).pop(true);
               },
-              child:
-                  const Text('Remove'),
+              child: const Text(
+                'Remove',
+              ),
             ),
           ],
         );
@@ -268,22 +263,19 @@ class _FriendsScreenState
     }
 
     try {
-      final batch =
-          _firestore.batch();
+      final batch = _firestore.batch();
 
-      final myFriend =
-          _firestore
-              .collection('users')
-              .doc(user.uid)
-              .collection('friends')
-              .doc(friendUid);
+      final myFriend = _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('friends')
+          .doc(friendUid);
 
-      final friendOfMine =
-          _firestore
-              .collection('users')
-              .doc(friendUid)
-              .collection('friends')
-              .doc(user.uid);
+      final friendOfMine = _firestore
+          .collection('users')
+          .doc(friendUid)
+          .collection('friends')
+          .doc(user.uid);
 
       batch.delete(myFriend);
       batch.delete(friendOfMine);
@@ -311,8 +303,7 @@ class _FriendsScreenState
   ) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
       ),
@@ -342,8 +333,7 @@ class _FriendsScreenState
     String uid,
   ) {
     return StreamBuilder<
-        QuerySnapshot<
-            Map<String, dynamic>>>(
+        QuerySnapshot<Map<String, dynamic>>>(
       stream: _firestore
           .collection('friendRequests')
           .where(
@@ -359,8 +349,7 @@ class _FriendsScreenState
             descending: true,
           )
           .snapshots(),
-      builder:
-          (context, snapshot) {
+      builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const SizedBox();
         }
@@ -402,11 +391,6 @@ class _FriendsScreenState
                                 'Friend')
                             .toString();
 
-                    final senderId =
-                        (data['senderId'] ??
-                                '')
-                            .toString();
-
                     return ListTile(
                       leading:
                           const CircleAvatar(
@@ -414,22 +398,17 @@ class _FriendsScreenState
                           Icons.person,
                         ),
                       ),
-                      title:
-                          Text(name),
-                      subtitle:
-                          const Text(
+                      title: Text(name),
+                      subtitle: const Text(
                         'Wants to be your friend',
                       ),
-                      trailing:
-                          Row(
+                      trailing: Row(
                         mainAxisSize:
                             MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip:
-                                'Accept',
-                            onPressed:
-                                () {
+                            tooltip: 'Accept',
+                            onPressed: () {
                               _acceptRequest(
                                 request,
                               );
@@ -441,10 +420,8 @@ class _FriendsScreenState
                             ),
                           ),
                           IconButton(
-                            tooltip:
-                                'Decline',
-                            onPressed:
-                                () {
+                            tooltip: 'Decline',
+                            onPressed: () {
                               _declineRequest(
                                 request,
                               );
@@ -472,15 +449,13 @@ class _FriendsScreenState
     String uid,
   ) {
     return StreamBuilder<
-        QuerySnapshot<
-            Map<String, dynamic>>>(
+        QuerySnapshot<Map<String, dynamic>>>(
       stream: _firestore
           .collection('users')
           .doc(uid)
           .collection('friends')
           .snapshots(),
-      builder:
-          (context, snapshot) {
+      builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const Padding(
             padding:
@@ -547,8 +522,7 @@ class _FriendsScreenState
 
                 return FutureBuilder<
                     DocumentSnapshot<
-                        Map<String,
-                            dynamic>>>(
+                        Map<String, dynamic>>>(
                   future: _firestore
                       .collection('users')
                       .doc(friendUid)
@@ -582,6 +556,11 @@ class _FriendsScreenState
                                 '')
                             .toString();
 
+                    final email =
+                        (data['email'] ??
+                                '')
+                            .toString();
+
                     return Card(
                       margin:
                           const EdgeInsets
@@ -593,8 +572,7 @@ class _FriendsScreenState
                             _avatar(
                           photoUrl,
                         ),
-                        title:
-                            Text(
+                        title: Text(
                           name,
                           style:
                               const TextStyle(
@@ -603,11 +581,7 @@ class _FriendsScreenState
                           ),
                         ),
                         subtitle:
-                            Text(
-                          (data['email'] ??
-                                  '')
-                              .toString(),
-                        ),
+                            Text(email),
                         trailing:
                             PopupMenuButton<
                                 String>(
@@ -621,23 +595,19 @@ class _FriendsScreenState
                             }
                           },
                           itemBuilder:
-                              (
-                            context,
-                          ) {
+                              (context) {
                             return const [
                               PopupMenuItem(
                                 value:
                                     'remove',
-                                child:
-                                    Row(
+                                child: Row(
                                   children: [
                                     Icon(
                                       Icons
                                           .person_remove_outlined,
                                     ),
                                     SizedBox(
-                                      width:
-                                          8,
+                                      width: 8,
                                     ),
                                     Text(
                                       'Remove Friend',
@@ -668,14 +638,12 @@ class _FriendsScreenState
     }
 
     return StreamBuilder<
-        QuerySnapshot<
-            Map<String, dynamic>>>(
+        QuerySnapshot<Map<String, dynamic>>>(
       stream: _firestore
           .collection('users')
           .limit(50)
           .snapshots(),
-      builder:
-          (context, snapshot) {
+      builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const Padding(
             padding:
@@ -713,14 +681,12 @@ class _FriendsScreenState
                 doc.data();
 
             final name =
-                (data['name'] ??
-                        '')
+                (data['name'] ?? '')
                     .toString()
                     .toLowerCase();
 
             final email =
-                (data['email'] ??
-                        '')
+                (data['email'] ?? '')
                     .toString()
                     .toLowerCase();
 
@@ -790,8 +756,7 @@ class _FriendsScreenState
                         _avatar(
                       photoUrl,
                     ),
-                    title:
-                        Text(
+                    title: Text(
                       name,
                       style:
                           const TextStyle(
@@ -853,6 +818,8 @@ class _FriendsScreenState
       ),
       body: RefreshIndicator(
         onRefresh: () async {
+          if (!mounted) return;
+
           setState(() {});
         },
         child: ListView(
