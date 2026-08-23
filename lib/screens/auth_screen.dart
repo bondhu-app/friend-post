@@ -44,7 +44,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
     try {
       final email = _emailController.text.trim();
-      final password = _passwordController.text.trim();
+      final password = _passwordController.text;
 
       if (_isLogin) {
         await _login(
@@ -101,17 +101,27 @@ class _AuthScreenState extends State<AuthScreen> {
     required String email,
     required String password,
   }) async {
-    await _auth.signInWithEmailAndPassword(
+    final credential = await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
 
+    final user = credential.user;
+
+    if (user == null) {
+      throw FirebaseException(
+        plugin: 'firebase_auth',
+        message: 'Login failed. User could not be found.',
+      );
+    }
+
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Login successful!'),
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const HomeScreen(),
       ),
+      (route) => false,
     );
   }
 
@@ -158,12 +168,11 @@ class _AuthScreenState extends State<AuthScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Account created successfully!',
-        ),
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const HomeScreen(),
       ),
+      (route) => false,
     );
   }
 
@@ -293,6 +302,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 22),
 
                   const Text(
@@ -389,8 +399,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         icon: Icon(
                           _obscurePassword
                               ? Icons.visibility_outlined
-                              : Icons
-                                  .visibility_off_outlined,
+                              : Icons.visibility_off_outlined,
                         ),
                       ),
                       border: OutlineInputBorder(
@@ -444,6 +453,224 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+// ============================================================
+// HOME SCREEN
+// ============================================================
+
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  Future<void> _logout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+
+    if (!context.mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const AuthScreen(),
+      ),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    final displayName =
+        user?.displayName?.trim().isNotEmpty == true
+            ? user!.displayName!
+            : 'Friend';
+
+    final email = user?.email ?? '';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Friend Post',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            onPressed: () => _logout(context),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await Future<void>.delayed(
+            const Duration(milliseconds: 500),
+          );
+        },
+
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const SizedBox(height: 20),
+
+            CircleAvatar(
+              radius: 42,
+              child: Text(
+                displayName.isNotEmpty
+                    ? displayName[0].toUpperCase()
+                    : 'F',
+                style: const TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 18),
+
+            Text(
+              'Welcome, $displayName!',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              email,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                color: Colors.grey,
+              ),
+            ),
+
+            const SizedBox(height: 30),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.people_alt_rounded,
+                      size: 54,
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    const Text(
+                      'Friend Post',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    const Text(
+                      'Your account is logged in successfully.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Post feature will be added here.',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.add_circle_outline,
+                        ),
+                        label: const Text(
+                          'Create Post',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Card(
+              child: ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.person),
+                ),
+                title: const Text(
+                  'My Profile',
+                ),
+                subtitle: const Text(
+                  'View and manage your profile',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Profile feature will be added here.',
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            Card(
+              child: ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.settings),
+                ),
+                title: const Text(
+                  'Settings',
+                ),
+                subtitle: const Text(
+                  'Manage your account settings',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Settings feature will be added here.',
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
