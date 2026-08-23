@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'create_post_screen.dart';
 import 'friends_screen.dart';
+import 'post_detail_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -90,6 +91,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (result == true && mounted) {
       await _loadUserData();
+    }
+  }
+
+  Future<void> _openPost(
+    String postId,
+  ) async {
+    final result =
+        await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            PostDetailScreen(
+          postId: postId,
+        ),
+      ),
+    );
+
+    if (result == true && mounted) {
+      setState(() {});
     }
   }
 
@@ -241,9 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           FontWeight.w600,
                     ),
                   ),
-
                   const SizedBox(height: 14),
-
                   Row(
                     children: [
                       _avatar(radius: 22),
@@ -266,9 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 10),
-
                   Row(
                     children: [
                       Expanded(
@@ -486,156 +501,273 @@ class _HomeScreenState extends State<HomeScreen> {
             .toString();
 
     final likes =
-        data['likeCount'] ??
-            data['likes'] ??
-            0;
+        _toInt(
+      data['likeCount'] ??
+          data['likes'],
+    );
 
     final comments =
-        data['commentCount'] ?? 0;
+        _toInt(
+      data['commentCount'],
+    );
+
+    final createdAt =
+        data['createdAt'];
 
     return Card(
       margin:
           const EdgeInsets.only(
         bottom: 14,
       ),
-      child: Padding(
-        padding:
-            const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                if (photoUrl.isNotEmpty)
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundImage:
-                        NetworkImage(
-                      photoUrl,
+      clipBehavior:
+          Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          _openPost(post.id);
+        },
+        child: Padding(
+          padding:
+              const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (photoUrl.isNotEmpty)
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundImage:
+                          NetworkImage(
+                        photoUrl,
+                      ),
+                    )
+                  else
+                    const CircleAvatar(
+                      radius: 22,
+                      child: Icon(
+                        Icons.person,
+                      ),
                     ),
-                  )
-                else
-                  const CircleAvatar(
-                    radius: 22,
-                    child: Icon(
-                      Icons.person,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment
+                              .start,
+                      children: [
+                        Text(
+                          name,
+                          style:
+                              const TextStyle(
+                            fontWeight:
+                                FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(
+                          height: 3,
+                        ),
+                        Text(
+                          _formatDate(
+                            createdAt,
+                          ),
+                          style:
+                              const TextStyle(
+                            fontSize: 12,
+                            color:
+                                Colors.grey,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const Icon(
+                    Icons.more_horiz,
+                  ),
+                ],
+              ),
 
-                const SizedBox(width: 12),
+              if (text.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text(
+                  text,
+                  style:
+                      const TextStyle(
+                    fontSize: 16,
+                    height: 1.4,
+                  ),
+                ),
+              ],
 
-                Expanded(
-                  child: Text(
-                    name,
+              if (imageUrl.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius:
+                      BorderRadius.circular(
+                    12,
+                  ),
+                  child: Image.network(
+                    imageUrl,
+                    width:
+                        double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder:
+                        (
+                      context,
+                      error,
+                      stackTrace,
+                    ) {
+                      return const SizedBox(
+                        height: 180,
+                        child: Center(
+                          child: Icon(
+                            Icons
+                                .broken_image_outlined,
+                            size: 50,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 10),
+
+              Row(
+                children: [
+                  Text(
+                    '$likes likes',
                     style:
                         const TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
-                      fontSize: 16,
+                      color: Colors.grey,
                     ),
                   ),
-                ),
-
-                const Icon(
-                  Icons.more_horiz,
-                ),
-              ],
-            ),
-
-            if (text.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Text(
-                text,
-                style:
-                    const TextStyle(
-                  fontSize: 16,
-                ),
+                  const SizedBox(
+                    width: 12,
+                  ),
+                  Text(
+                    '$comments comments',
+                    style:
+                        const TextStyle(
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
               ),
-            ],
 
-            if (imageUrl.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(
-                  12,
-                ),
-                child: Image.network(
-                  imageUrl,
-                  width:
-                      double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder:
-                      (
-                    context,
-                    error,
-                    stackTrace,
-                  ) {
-                    return const SizedBox(
-                      height: 180,
-                      child: Center(
-                        child: Icon(
-                          Icons
-                              .broken_image_outlined,
-                          size: 50,
-                        ),
+              const Divider(
+                height: 24,
+              ),
+
+              Row(
+                children: [
+                  Expanded(
+                    child:
+                        TextButton.icon(
+                      onPressed: () {
+                        _openPost(
+                          post.id,
+                        );
+                      },
+                      icon: const Icon(
+                        Icons
+                            .favorite_border,
                       ),
-                    );
-                  },
-                ),
+                      label:
+                          const Text('Like'),
+                    ),
+                  ),
+                  Expanded(
+                    child:
+                        TextButton.icon(
+                      onPressed: () {
+                        _openPost(
+                          post.id,
+                        );
+                      },
+                      icon: const Icon(
+                        Icons
+                            .comment_outlined,
+                      ),
+                      label:
+                          const Text('Comment'),
+                    ),
+                  ),
+                  Expanded(
+                    child:
+                        TextButton.icon(
+                      onPressed: () {
+                        _openPost(
+                          post.id,
+                        );
+                      },
+                      icon: const Icon(
+                        Icons
+                            .open_in_new,
+                      ),
+                      label:
+                          const Text('Open'),
+                    ),
+                  ),
+                ],
               ),
             ],
-
-            const SizedBox(height: 10),
-
-            Row(
-              children: [
-                Text(
-                  '$likes likes',
-                  style:
-                      const TextStyle(
-                    color: Colors.grey,
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                Text(
-                  '$comments comments',
-                  style:
-                      const TextStyle(
-                    color: Colors.grey,
-                  ),
-                ),
-
-                const Spacer(),
-
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons
-                        .favorite_border,
-                  ),
-                  label:
-                      const Text('Like'),
-                ),
-
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons
-                        .comment_outlined,
-                  ),
-                  label:
-                      const Text('Comment'),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
+  }
+
+  String _formatDate(
+    dynamic value,
+  ) {
+    if (value is! Timestamp) {
+      return 'Just now';
+    }
+
+    final date =
+        value.toDate();
+
+    final now =
+        DateTime.now();
+
+    final difference =
+        now.difference(date);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    }
+
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    }
+
+    if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    }
+
+    if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    }
+
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   Widget _settingsPage() {
@@ -651,9 +783,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 FontWeight.bold,
           ),
         ),
-
         const SizedBox(height: 20),
-
         Card(
           child: Column(
             children: [
@@ -670,9 +800,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onTap: () {},
               ),
-
               const Divider(height: 1),
-
               ListTile(
                 leading: const Icon(
                   Icons.lock_outline,
@@ -684,9 +812,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onTap: () {},
               ),
-
               const Divider(height: 1),
-
               ListTile(
                 leading: const Icon(
                   Icons.security_outlined,
@@ -698,9 +824,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onTap: () {},
               ),
-
               const Divider(height: 1),
-
               ListTile(
                 leading: const Icon(
                   Icons.info_outline,
@@ -721,9 +845,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
-
               const Divider(height: 1),
-
               ListTile(
                 leading: const Icon(
                   Icons.logout,
@@ -743,16 +865,12 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (_currentIndex) {
       case 0:
         return _homePage();
-
       case 1:
         return const FriendsScreen();
-
       case 2:
         return const ProfileScreen();
-
       case 3:
         return _settingsPage();
-
       default:
         return _homePage();
     }
@@ -762,23 +880,21 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (_currentIndex) {
       case 0:
         return 'Friend Post';
-
       case 1:
         return 'Friends';
-
       case 2:
         return 'My Profile';
-
       case 3:
         return 'Settings';
-
       default:
         return 'Friend Post';
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     if (_isLoading) {
       return const Scaffold(
         body: Center(
@@ -808,9 +924,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-
       body: _currentPage(),
-
       bottomNavigationBar:
           NavigationBar(
         selectedIndex:
@@ -856,7 +970,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-
       floatingActionButton:
           _currentIndex == 0
               ? FloatingActionButton(
