@@ -1,6 +1,7 @@
-heimport 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'create_post_screen.dart';
 import 'friends_screen.dart';
 import 'friend_requests_screen.dart';
 import 'profile_screen.dart';
@@ -284,12 +285,11 @@ class HomeScreen extends StatelessWidget {
                 trailing: const Icon(
                   Icons.chevron_right_rounded,
                 ),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Post creation will be added next.',
-                      ),
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const CreatePostScreen(),
                     ),
                   );
                 },
