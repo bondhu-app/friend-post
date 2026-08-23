@@ -11,24 +11,13 @@ class FriendsScreen extends StatefulWidget {
 
 class _FriendsScreenState extends State<FriendsScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
   final TextEditingController _searchController =
       TextEditingController();
 
   String _searchText = '';
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _searchController.addListener(() {
-      setState(() {
-        _searchText = _searchController.text.trim().toLowerCase();
-      });
-    });
-  }
 
   @override
   void dispose() {
@@ -37,8 +26,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
   }
 
   Future<void> _sendFriendRequest(
-    String targetUserId,
-    String targetName,
+    String userId,
+    String name,
   ) async {
     final currentUser = _auth.currentUser;
 
@@ -46,45 +35,25 @@ class _FriendsScreenState extends State<FriendsScreen> {
       return;
     }
 
-    if (currentUser.uid == targetUserId) {
+    if (currentUser.uid == userId) {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
-      final currentUserDocument = await _firestore
-          .collection('users')
-          .doc(currentUser.uid)
-          .get();
-
-      final currentUserData =
-          currentUserDocument.data() ?? <String, dynamic>{};
-
       final requestId =
-          '${currentUser.uid}_$targetUserId';
+          '${currentUser.uid}_$userId';
 
       await _firestore
           .collection('friendRequests')
           .doc(requestId)
           .set({
-        'requestId': requestId,
         'senderId': currentUser.uid,
+        'receiverId': userId,
         'senderName':
-            currentUserData['name'] ??
-                currentUser.displayName ??
-                '',
-        'senderEmail':
-            currentUserData['email'] ??
-                currentUser.email ??
-                '',
-        'receiverId': targetUserId,
-        'receiverName': targetName,
+            currentUser.displayName ?? 'Friend',
         'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt':
+            FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
@@ -92,7 +61,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Friend request sent to $targetName.',
+            'Friend request sent to $name',
           ),
         ),
       );
@@ -107,22 +76,6 @@ class _FriendsScreenState extends State<FriendsScreen> {
           ),
         ),
       );
-    } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not send friend request.',
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
   }
 
@@ -138,9 +91,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
   bool _matchesSearch(
     Map<String, dynamic> data,
   ) {
-    if (_searchText.isEmpty) {
+    if (_searchText.trim().isEmpty) {
       return true;
     }
+
+    final search =
+        _searchText.trim().toLowerCase();
 
     final name =
         (data['name'] ?? '').toString().toLowerCase();
@@ -148,8 +104,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
     final email =
         (data['email'] ?? '').toString().toLowerCase();
 
-    return name.contains(_searchText) ||
-        email.contains(_searchText);
+    return name.contains(search) ||
+        email.contains(search);
   }
 
   Widget _buildUserAvatar(
@@ -160,24 +116,82 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
     if (photoUrl.isNotEmpty) {
       return CircleAvatar(
-        radius: 27,
-        backgroundImage: NetworkImage(photoUrl),
+        radius: 28,
+        backgroundImage:
+            NetworkImage(photoUrl),
       );
     }
 
     return const CircleAvatar(
-      radius: 27,
+      radius: 28,
       child: Icon(
-        Icons.person_rounded,
-        size: 28,
+        Icons.person,
+        size: 30,
+      ),
+    );
+  }
+
+  Widget _buildUserCard(
+    QueryDocumentSnapshot<Map<String, dynamic>>
+        document,
+  ) {
+    final data = document.data();
+
+    final userId = document.id;
+
+    final name =
+        (data['name'] ?? 'Friend').toString();
+
+    final email =
+        (data['email'] ?? '').toString();
+
+    final currentUser =
+        _auth.currentUser;
+
+    if (currentUser != null &&
+        currentUser.uid == userId) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(
+        bottom: 10,
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 6,
+        ),
+        leading: _buildUserAvatar(data),
+        title: Text(
+          name,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: email.isEmpty
+            ? const Text('Friend Post user')
+            : Text(email),
+        trailing: FilledButton.icon(
+          onPressed: () {
+            _sendFriendRequest(
+              userId,
+              name,
+            );
+          },
+          icon: const Icon(
+            Icons.person_add_alt_1,
+            size: 18,
+          ),
+          label: const Text('Add'),
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = _auth.currentUser;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -190,30 +204,42 @@ class _FriendsScreenState extends State<FriendsScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(
+            padding:
+                const EdgeInsets.fromLTRB(
               16,
-              16,
+              12,
               16,
               8,
             ),
             child: TextField(
               controller: _searchController,
-              textInputAction: TextInputAction.search,
+              onChanged: (value) {
+                setState(() {
+                  _searchText = value;
+                });
+              },
               decoration: InputDecoration(
-                hintText: 'Search people...',
+                hintText:
+                    'Search friends...',
                 prefixIcon: const Icon(
-                  Icons.search_rounded,
+                  Icons.search,
                 ),
-                suffixIcon: _searchText.isNotEmpty
-                    ? IconButton(
-                        onPressed: () {
-                          _searchController.clear();
-                        },
-                        icon: const Icon(
-                          Icons.clear_rounded,
-                        ),
-                      )
-                    : null,
+                suffixIcon:
+                    _searchText.isNotEmpty
+                        ? IconButton(
+                            onPressed: () {
+                              _searchController
+                                  .clear();
+
+                              setState(() {
+                                _searchText = '';
+                              });
+                            },
+                            icon: const Icon(
+                              Icons.clear,
+                            ),
+                          )
+                        : null,
                 border: OutlineInputBorder(
                   borderRadius:
                       BorderRadius.circular(14),
@@ -222,45 +248,50 @@ class _FriendsScreenState extends State<FriendsScreen> {
             ),
           ),
 
-          const SizedBox(height: 8),
-
           Expanded(
             child: StreamBuilder<
-                QuerySnapshot<Map<String, dynamic>>>(
+                QuerySnapshot<
+                    Map<String, dynamic>>>(
               stream: _usersStream(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-
+              builder:
+                  (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding:
+                          const EdgeInsets.all(
+                        24,
+                      ),
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment:
+                            MainAxisAlignment.center,
                         children: [
                           const Icon(
-                            Icons.error_outline_rounded,
-                            size: 50,
+                            Icons.error_outline,
+                            size: 55,
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(
+                            height: 12,
+                          ),
                           const Text(
                             'Could not load users.',
-                            textAlign: TextAlign.center,
+                            textAlign:
+                                TextAlign.center,
                             style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              fontWeight:
+                                  FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(
+                            height: 8,
+                          ),
                           Text(
-                            snapshot.error.toString(),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            '${snapshot.error}',
+                            textAlign:
+                                TextAlign.center,
+                            style:
+                                const TextStyle(
                               color: Colors.grey,
                             ),
                           ),
@@ -270,154 +301,89 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   );
                 }
 
+                if (snapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return const Center(
+                    child:
+                        CircularProgressIndicator(),
+                  );
+                }
+
                 final documents =
                     snapshot.data?.docs ?? [];
 
-                final users = documents.where((document) {
-                  final data = document.data();
-
-                  if (currentUser != null &&
-                      document.id == currentUser.uid) {
-                    return false;
-                  }
-
-                  final isBlocked =
-                      data['isBlocked'] == true;
-
-                  if (isBlocked) {
-                    return false;
-                  }
-
-                  return _matchesSearch(data);
+                final filtered =
+                    documents.where((doc) {
+                  return _matchesSearch(
+                    doc.data(),
+                  );
                 }).toList();
 
-                if (users.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.people_outline_rounded,
-                            size: 60,
+                if (filtered.isEmpty) {
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      setState(() {});
+                    },
+                    child: ListView(
+                      children: const [
+                        SizedBox(
+                          height: 180,
+                        ),
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.people_outline,
+                                size: 70,
+                              ),
+                              SizedBox(
+                                height: 14,
+                              ),
+                              Text(
+                                'No friends found.',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(
+                                height: 6,
+                              ),
+                              Text(
+                                'Try another search.',
+                                style:
+                                    TextStyle(
+                                  color:
+                                      Colors.grey,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 14),
-                          Text(
-                            _searchText.isEmpty
-                                ? 'No other users found.'
-                                : 'No users found for "$_searchText".',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   );
                 }
 
                 return RefreshIndicator(
                   onRefresh: () async {
-                    await Future<void>.delayed(
-                      const Duration(
-                        milliseconds: 500,
-                      ),
-                    );
+                    setState(() {});
                   },
-                  child: ListView.separated(
-                    physics:
-                        const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
+                  child: ListView.builder(
+                    padding:
+                        const EdgeInsets.fromLTRB(
                       16,
                       8,
                       16,
-                      24,
+                      20,
                     ),
-                    itemCount: users.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final document = users[index];
-                      final data = document.data();
-
-                      final userId = document.id;
-
-                      final name =
-                          (data['name'] ?? 'Friend Post User')
-                              .toString();
-
-                      final email =
-                          (data['email'] ?? '')
-                              .toString();
-
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: Row(
-                            children: [
-                              _buildUserAvatar(data),
-
-                              const SizedBox(width: 12),
-
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      name,
-                                      maxLines: 1,
-                                      overflow:
-                                          TextOverflow.ellipsis,
-                                      style:
-                                          const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight:
-                                            FontWeight.bold,
-                                      ),
-                                    ),
-                                    if (email.isNotEmpty) ...[
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        email,
-                                        maxLines: 1,
-                                        overflow:
-                                            TextOverflow.ellipsis,
-                                        style:
-                                            const TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-
-                              const SizedBox(width: 8),
-
-                              FilledButton.icon(
-                                onPressed: _isLoading
-                                    ? null
-                                    : () {
-                                        _sendFriendRequest(
-                                          userId,
-                                          name,
-                                        );
-                                      },
-                                icon: const Icon(
-                                  Icons.person_add_alt_1_rounded,
-                                  size: 18,
-                                ),
-                                label:
-                                    const Text('Add'),
-                              ),
-                            ],
-                          ),
-                        ),
+                    itemCount:
+                        filtered.length,
+                    itemBuilder:
+                        (context, index) {
+                      return _buildUserCard(
+                        filtered[index],
                       );
                     },
                   ),
