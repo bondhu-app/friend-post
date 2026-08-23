@@ -52,10 +52,8 @@ class _AuthScreenState extends State<AuthScreen> {
           password: password,
         );
       } else {
-        final name = _nameController.text.trim();
-
         await _register(
-          name: name,
+          name: _nameController.text.trim(),
           email: email,
           password: password,
         );
@@ -78,7 +76,7 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -255,7 +253,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
     setState(() {
       _isLogin = !_isLogin;
-      _obscurePassword = true;
     });
 
     _formKey.currentState?.reset();
@@ -346,7 +343,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
-                    autocorrect: false,
                     validator: _validateEmail,
                     decoration: InputDecoration(
                       labelText: 'Email',
@@ -366,7 +362,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     textInputAction: TextInputAction.done,
-                    autocorrect: false,
                     validator: _validatePassword,
                     onFieldSubmitted: (_) {
                       if (!_isLoading) {
@@ -381,8 +376,6 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       suffixIcon: IconButton(
                         onPressed: () {
-                          if (_isLoading) return;
-
                           setState(() {
                             _obscurePassword = !_obscurePassword;
                           });
