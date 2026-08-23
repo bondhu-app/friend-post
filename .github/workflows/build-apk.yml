@@ -35,15 +35,37 @@ jobs:
       - name: Check Flutter
         run: flutter --version
 
-      - name: Check project
-        run: |
-          test -f pubspec.yaml
-          test -f lib/main.dart
-          test -f lib/screens/auth_screen.dart
-          test -f android/app/google-services.json
-
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Search for Android V1 embedding
+        shell: bash
+        run: |
+          set +e
+
+          echo "========================================"
+          echo "Searching repository for Android V1 embedding"
+          echo "========================================"
+
+          FOUND=0
+
+          if grep -RInE \
+            --exclude-dir=.git \
+            --exclude-dir=build \
+            --exclude-dir=.dart_tool \
+            "io\.flutter\.app\.FlutterActivity|io\.flutter\.app\.FlutterApplication|GeneratedPluginRegistrant|PluginRegistry\.Registrar|FlutterActivityDelegate|FlutterView" \
+            .; then
+            FOUND=1
+          fi
+
+          echo "========================================"
+
+          if [ "$FOUND" -eq 1 ]; then
+            echo "ERROR: Android V1 embedding reference found."
+            exit 1
+          fi
+
+          echo "No Android V1 embedding reference found."
 
       - name: Analyze project
         run: flutter analyze
