@@ -1,4 +1,4 @@
-herimport 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -14,305 +14,292 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   int _currentIndex = 0;
+  bool _isLoading = true;
 
-  User? get _currentUser => _auth.currentUser;
+  String _userName = 'Friend';
+  String _userPhotoUrl = '';
 
-  Future<Map<String, dynamic>?> _getUserData() async {
-    final user = _currentUser;
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = _auth.currentUser;
 
     if (user == null) {
-      return null;
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      return;
     }
 
-    final doc = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
+    try {
+      final doc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
-    if (!doc.exists) {
-      return {
-        'name': user.displayName ?? 'User',
-        'email': user.email ?? '',
-        'photoUrl': '',
-      };
+      if (doc.exists) {
+        final data = doc.data();
+
+        if (mounted) {
+          setState(() {
+            _userName =
+                (data?['name'] ?? user.displayName ?? 'Friend')
+                    .toString();
+
+            _userPhotoUrl =
+                (data?['photoUrl'] ?? '').toString();
+
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _userName = user.displayName ?? 'Friend';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Load user data error: $e');
+
+      if (mounted) {
+        setState(() {
+          _userName = user.displayName ?? 'Friend';
+          _isLoading = false;
+        });
+      }
     }
-
-    return doc.data();
   }
 
   Future<void> _logout() async {
-    await _auth.signOut();
-
-    if (!mounted) return;
-
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      '/',
-      (route) => false,
-    );
-  }
-
-  Future<void> _createPost() async {
-    final controller = TextEditingController();
-
-    await showDialog<void>(
+    final shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        bool isSaving = false;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Create Post'),
-              content: TextField(
-                controller: controller,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  hintText: 'What is on your mind?',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isSaving
-                      ? null
-                      : () {
-                          Navigator.pop(dialogContext);
-                        },
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: isSaving
-                      ? null
-                      : () async {
-                          final text = controller.text.trim();
-
-                          if (text.isEmpty) {
-                            return;
-                          }
-
-                          final user = _currentUser;
-
-                          if (user == null) {
-                            return;
-                          }
-
-                          setDialogState(() {
-                            isSaving = true;
-                          });
-
-                          try {
-                            final userData = await _getUserData();
-
-                            await _firestore
-                                .collection('posts')
-                                .add({
-                              'uid': user.uid,
-                              'authorId': user.uid,
-                              'authorName':
-                                  userData?['name'] ??
-                                      user.displayName ??
-                                      'User',
-                              'authorEmail':
-                                  user.email ?? '',
-                              'text': text,
-                              'imageUrl': '',
-                              'likeCount': 0,
-                              'commentCount': 0,
-                              'shareCount': 0,
-                              'createdAt':
-                                  FieldValue.serverTimestamp(),
-                              'updatedAt':
-                                  FieldValue.serverTimestamp(),
-                            });
-
-                            if (!mounted) return;
-
-                            Navigator.pop(dialogContext);
-
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('Post created successfully!'),
-                              ),
-                            );
-                          } catch (e) {
-                            if (!mounted) return;
-
-                            setDialogState(() {
-                              isSaving = false;
-                            });
-
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Could not create post: $e',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                  child: isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text('Post'),
-                ),
-              ],
-            );
-          },
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Logout'),
+          content: const Text(
+            'Are you sure you want to logout?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              child: const Text('Logout'),
+            ),
+          ],
         );
       },
     );
 
-    controller.dispose();
+    if (shouldLogout != true) {
+      return;
+    }
+
+    try {
+      await _auth.signOut();
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/',
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Logout failed: $e',
+          ),
+        ),
+      );
+    }
   }
 
-  Widget _buildHomePage() {
-    final user = _currentUser;
-
-    if (user == null) {
-      return const Center(
-        child: Text('Please login again.'),
+  Widget _buildAvatar({
+    double radius = 24,
+  }) {
+    if (_userPhotoUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundImage: NetworkImage(_userPhotoUrl),
       );
     }
 
+    return CircleAvatar(
+      radius: radius,
+      child: Icon(
+        Icons.person,
+        size: radius,
+      ),
+    );
+  }
+
+  Widget _buildHomePage() {
     return RefreshIndicator(
-      onRefresh: () async {
-        setState(() {});
-      },
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            title: const Text(
-              'Friend Post',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
+      onRefresh: _loadUserData,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Row(
+            children: [
+              _buildAvatar(radius: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Welcome back!',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _userName,
+                      style: const TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            actions: [
               IconButton(
-                tooltip: 'Logout',
-                onPressed: _logout,
-                icon: const Icon(Icons.logout),
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Notifications coming soon.',
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                ),
               ),
             ],
           ),
 
-          SliverToBoxAdapter(
-            child: FutureBuilder<Map<String, dynamic>?>(
-              future: _getUserData(),
-              builder: (context, snapshot) {
-                final data = snapshot.data;
+          const SizedBox(height: 20),
 
-                final name =
-                    data?['name'] ??
-                    user.displayName ??
-                    'User';
-
-                final email =
-                    data?['email'] ??
-                    user.email ??
-                    '';
-
-                final photoUrl =
-                    data?['photoUrl'] ??
-                    '';
-
-                return Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 32,
-                            backgroundImage:
-                                photoUrl.toString().isNotEmpty
-                                    ? NetworkImage(
-                                        photoUrl.toString(),
-                                      )
-                                    : null,
-                            child:
-                                photoUrl.toString().isEmpty
-                                    ? const Icon(
-                                        Icons.person,
-                                        size: 34,
-                                      )
-                                    : null,
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  name.toString(),
-                                  maxLines: 1,
-                                  overflow:
-                                      TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight:
-                                        FontWeight.bold,
-                                  ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'What\'s on your mind?',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      _buildAvatar(radius: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Create post coming soon.',
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  email.toString(),
-                                  maxLines: 1,
-                                  overflow:
-                                      TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
+                              ),
+                            );
+                          },
+                          child: const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Write something...',
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                );
-              },
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Photo post coming soon.',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.photo_outlined,
+                          ),
+                          label: const Text('Photo'),
+                        ),
+                      ),
+                      Expanded(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Feeling feature coming soon.',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons.emoji_emotions_outlined,
+                          ),
+                          label: const Text('Feeling'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
 
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                16,
-                0,
-                16,
-                12,
-              ),
-              child: SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: _createPost,
-                  icon: const Icon(
-                    Icons.add_circle_outline,
-                  ),
-                  label: const Text(
-                    'Create Post',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
+          const SizedBox(height: 18),
+
+          const Text(
+            'Recent Posts',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
             ),
           ),
+
+          const SizedBox(height: 12),
 
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _firestore
@@ -321,18 +308,25 @@ class _HomeScreenState extends State<HomeScreen> {
                   'createdAt',
                   descending: true,
                 )
+                .limit(20)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Could not load posts.\n\n${snapshot.error}',
-                        textAlign: TextAlign.center,
-                      ),
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.article_outlined,
+                          size: 45,
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'No posts available yet.',
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -340,9 +334,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
               if (snapshot.connectionState ==
                   ConnectionState.waiting) {
-                return const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(30),
                     child: CircularProgressIndicator(),
                   ),
                 );
@@ -351,90 +345,72 @@ class _HomeScreenState extends State<HomeScreen> {
               final posts = snapshot.data?.docs ?? [];
 
               if (posts.isEmpty) {
-                return const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.article_outlined,
-                            size: 60,
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(25),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.dynamic_feed_outlined,
+                          size: 50,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'No posts yet.',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
                           ),
-                          SizedBox(height: 12),
-                          Text(
-                            'No posts yet',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Be the first person to create a post.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey,
                           ),
-                          SizedBox(height: 6),
-                          Text(
-                            'Create the first post!',
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 );
               }
 
-              return SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final post = posts[index].data();
-
-                    final authorName =
-                        post['authorName'] ??
-                        'User';
-
-                    final text =
-                        post['text'] ??
-                        '';
-
-                    final likeCount =
-                        post['likeCount'] ?? 0;
-
-                    final commentCount =
-                        post['commentCount'] ?? 0;
-
-                    return _buildPostCard(
-                      authorName: authorName.toString(),
-                      text: text.toString(),
-                      likeCount: likeCount,
-                      commentCount: commentCount,
-                    );
-                  },
-                  childCount: posts.length,
-                ),
+              return Column(
+                children: posts.map((post) {
+                  return _buildPostCard(post);
+                }).toList(),
               );
             },
-          ),
-
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 24),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPostCard({
-    required String authorName,
-    required String text,
-    required dynamic likeCount,
-    required dynamic commentCount,
-  }) {
+  Widget _buildPostCard(
+    QueryDocumentSnapshot<Map<String, dynamic>> post,
+  ) {
+    final data = post.data();
+
+    final name =
+        (data['userName'] ?? data['name'] ?? 'Friend')
+            .toString();
+
+    final text =
+        (data['text'] ?? data['content'] ?? '').toString();
+
+    final photoUrl =
+        (data['photoUrl'] ?? '').toString();
+
+    final imageUrl =
+        (data['imageUrl'] ?? '').toString();
+
+    final likes =
+        (data['likeCount'] ?? data['likes'] ?? 0);
+
     return Card(
-      margin: const EdgeInsets.fromLTRB(
-        16,
-        6,
-        16,
-        6,
-      ),
+      margin: const EdgeInsets.only(bottom: 14),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -443,13 +419,21 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Row(
               children: [
-                const CircleAvatar(
-                  child: Icon(Icons.person),
-                ),
+                if (photoUrl.isNotEmpty)
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundImage:
+                        NetworkImage(photoUrl),
+                  )
+                else
+                  const CircleAvatar(
+                    radius: 22,
+                    child: Icon(Icons.person),
+                  ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    authorName,
+                    name,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -458,59 +442,70 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 IconButton(
                   onPressed: () {},
-                  icon: const Icon(
-                    Icons.more_vert,
-                  ),
+                  icon: const Icon(Icons.more_horiz),
                 ),
               ],
             ),
 
-            const SizedBox(height: 14),
-
-            Text(
-              text,
-              style: const TextStyle(
-                fontSize: 16,
-                height: 1.4,
+            if (text.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(
+                text,
+                style: const TextStyle(
+                  fontSize: 16,
+                ),
               ),
-            ),
+            ],
 
-            const SizedBox(height: 14),
+            if (imageUrl.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius:
+                    BorderRadius.circular(12),
+                child: Image.network(
+                  imageUrl,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder:
+                      (context, error, stackTrace) {
+                    return const SizedBox(
+                      height: 180,
+                      child: Center(
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          size: 50,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
 
-            const Divider(),
+            const SizedBox(height: 12),
 
             Row(
               children: [
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.favorite_border,
-                    ),
-                    label: Text(
-                      '$likeCount Like',
-                    ),
+                Text(
+                  '$likes likes',
+                  style: const TextStyle(
+                    color: Colors.grey,
                   ),
                 ),
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.comment_outlined,
-                    ),
-                    label: Text(
-                      '$commentCount Comment',
-                    ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons.favorite_border,
                   ),
+                  label: const Text('Like'),
                 ),
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(
-                      Icons.share_outlined,
-                    ),
-                    label: const Text('Share'),
+                TextButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons.comment_outlined,
                   ),
+                  label: const Text('Comment'),
                 ),
               ],
             ),
@@ -522,138 +517,116 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildFriendsPage() {
     return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.people_outline,
-              size: 70,
+      child: Column(
+        mainAxisAlignment:
+            MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.people_outline,
+            size: 80,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Friends',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
             ),
-            SizedBox(height: 16),
-            Text(
-              'Friends',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Friends feature is coming soon.',
+            style: TextStyle(
+              color: Colors.grey,
             ),
-            SizedBox(height: 8),
-            Text(
-              'Your friends section is ready.',
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildProfilePage() {
-    final user = _currentUser;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
 
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: _getUserData(),
-      builder: (context, snapshot) {
-        final data = snapshot.data;
+          _buildAvatar(radius: 55),
 
-        final name =
-            data?['name'] ??
-            user?.displayName ??
-            'User';
+          const SizedBox(height: 16),
 
-        final email =
-            data?['email'] ??
-            user?.email ??
-            '';
-
-        final bio =
-            data?['bio'] ??
-            '';
-
-        return ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            const SizedBox(height: 20),
-
-            const CircleAvatar(
-              radius: 55,
-              child: Icon(
-                Icons.person,
-                size: 60,
-              ),
+          Text(
+            _userName,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
             ),
+          ),
 
-            const SizedBox(height: 16),
+          const SizedBox(height: 6),
 
-            Text(
-              name.toString(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.bold,
-              ),
+          Text(
+            _auth.currentUser?.email ?? '',
+            style: const TextStyle(
+              color: Colors.grey,
             ),
+          ),
 
-            const SizedBox(height: 6),
+          const SizedBox(height: 25),
 
-            Text(
-              email.toString(),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-              ),
-            ),
-
-            if (bio.toString().isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Text(
-                bio.toString(),
-                textAlign: TextAlign.center,
-              ),
-            ],
-
-            const SizedBox(height: 30),
-
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    leading: const Icon(
-                      Icons.person_outline,
-                    ),
-                    title: const Text('My Profile'),
-                    trailing: const Icon(
-                      Icons.chevron_right,
-                    ),
-                    onTap: () {},
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.person_outline,
                   ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.settings_outlined,
-                    ),
-                    title: const Text('Settings'),
-                    trailing: const Icon(
-                      Icons.chevron_right,
-                    ),
-                    onTap: () {},
+                  title: const Text('My Profile'),
+                  trailing: const Icon(
+                    Icons.chevron_right,
                   ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.logout,
-                    ),
-                    title: const Text('Logout'),
-                    onTap: _logout,
+                  onTap: () {},
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(
+                    Icons.edit_outlined,
                   ),
-                ],
-              ),
+                  title: const Text('Edit Profile'),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
+                  onTap: () {},
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(
+                    Icons.settings_outlined,
+                  ),
+                  title: const Text('Settings'),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
+                  onTap: () {
+                    setState(() {
+                      _currentIndex = 3;
+                    });
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(
+                    Icons.logout,
+                  ),
+                  title: const Text('Logout'),
+                  onTap: _logout,
+                ),
+              ],
             ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
     );
   }
 
@@ -661,69 +634,110 @@ class _HomeScreenState extends State<HomeScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const SizedBox(height: 10),
-
-        const ListTile(
-          leading: Icon(
-            Icons.notifications_outlined,
-          ),
-          title: Text('Notifications'),
-          subtitle: Text(
-            'Notification settings',
+        const Text(
+          'Settings',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
           ),
         ),
 
-        const Divider(),
+        const SizedBox(height: 20),
 
-        const ListTile(
-          leading: Icon(
-            Icons.lock_outline,
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(
+                  Icons.notifications_outlined,
+                ),
+                title: const Text('Notifications'),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {},
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(
+                  Icons.lock_outline,
+                ),
+                title: const Text('Privacy'),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {},
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(
+                  Icons.security_outlined,
+                ),
+                title: const Text('Security'),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {},
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(
+                  Icons.info_outline,
+                ),
+                title: const Text('About Friend Post'),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {
+                  showAboutDialog(
+                    context: context,
+                    applicationName: 'Friend Post',
+                    applicationVersion: '1.0.0',
+                    applicationLegalese:
+                        'A social media app for connecting with friends.',
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(
+                  Icons.logout,
+                ),
+                title: const Text('Logout'),
+                onTap: _logout,
+              ),
+            ],
           ),
-          title: Text('Privacy'),
-          subtitle: Text(
-            'Manage your privacy',
-          ),
-        ),
-
-        const Divider(),
-
-        const ListTile(
-          leading: Icon(
-            Icons.info_outline,
-          ),
-          title: Text('About Friend Post'),
-          subtitle: Text(
-            'Social media app',
-          ),
-        ),
-
-        const Divider(),
-
-        ListTile(
-          leading: const Icon(
-            Icons.logout,
-          ),
-          title: const Text('Logout'),
-          onTap: _logout,
         ),
       ],
     );
   }
 
-  Widget _buildCurrentPage() {
+  String _getTitle() {
+    switch (_currentIndex) {
+      case 0:
+        return 'Friend Post';
+      case 1:
+        return 'Friends';
+      case 2:
+        return 'My Profile';
+      case 3:
+        return 'Settings';
+      default:
+        return 'Friend Post';
+    }
+  }
+
+  Widget _getCurrentPage() {
     switch (_currentIndex) {
       case 0:
         return _buildHomePage();
-
       case 1:
         return _buildFriendsPage();
-
       case 2:
         return _buildProfilePage();
-
       case 3:
         return _buildSettingsPage();
-
       default:
         return _buildHomePage();
     }
@@ -731,19 +745,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
-      body: _buildCurrentPage(),
+      appBar: AppBar(
+        title: Text(
+          _getTitle(),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        centerTitle: false,
+        actions: [
+          if (_currentIndex == 0)
+            IconButton(
+              onPressed: _loadUserData,
+              icon: const Icon(Icons.refresh),
+            ),
+        ],
+      ),
 
-      floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton(
-              onPressed: _createPost,
-              child: const Icon(
-                Icons.add,
-              ),
-            )
-          : null,
+      body: _getCurrentPage(),
 
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar:
+          NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
           setState(() {
@@ -752,43 +783,44 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(
-              Icons.home_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.home,
-            ),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(
-              Icons.people_outline,
-            ),
-            selectedIcon: Icon(
-              Icons.people,
-            ),
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
             label: 'Friends',
           ),
           NavigationDestination(
-            icon: Icon(
-              Icons.person_outline,
-            ),
-            selectedIcon: Icon(
-              Icons.person,
-            ),
-            label: 'My Profile',
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
           ),
           NavigationDestination(
-            icon: Icon(
-              Icons.settings_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.settings,
-            ),
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
             label: 'Settings',
           ),
         ],
       ),
+
+      floatingActionButton:
+          _currentIndex == 0
+              ? FloatingActionButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Create post coming soon.',
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Icon(Icons.add),
+                )
+              : null,
     );
   }
 }
