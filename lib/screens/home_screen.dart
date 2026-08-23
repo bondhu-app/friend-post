@@ -1,7 +1,8 @@
-import 'package:firebase_auth/firebase_auth.dart';
+heimport 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'friends_screen.dart';
+import 'friend_requests_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -44,6 +45,18 @@ class HomeScreen extends StatelessWidget {
         ),
         actions: [
           IconButton(
+            tooltip: 'Friend Requests',
+            onPressed: () {
+              _openScreen(
+                context,
+                const FriendRequestsScreen(),
+              );
+            },
+            icon: const Icon(
+              Icons.person_add_alt_1_rounded,
+            ),
+          ),
+          IconButton(
             tooltip: 'Logout',
             onPressed: () async {
               await _logout(context);
@@ -54,14 +67,12 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-
       body: RefreshIndicator(
         onRefresh: () async {
           await Future<void>.delayed(
             const Duration(milliseconds: 500),
           );
         },
-
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
@@ -203,6 +214,43 @@ class HomeScreen extends StatelessWidget {
                   _openScreen(
                     context,
                     const FriendsScreen(),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor:
+                      Colors.blue.withValues(alpha: 0.12),
+                  child: const Icon(
+                    Icons.person_add_alt_1_rounded,
+                    color: Colors.blue,
+                  ),
+                ),
+                title: const Text(
+                  'Friend Requests',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Accept or reject friend requests',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                ),
+                onTap: () {
+                  _openScreen(
+                    context,
+                    const FriendRequestsScreen(),
                   );
                 },
               ),
