@@ -6,392 +6,917 @@ class FriendsScreen extends StatefulWidget {
   const FriendsScreen({super.key});
 
   @override
-  State<FriendsScreen> createState() => _FriendsScreenState();
+  State<FriendsScreen> createState() =>
+      _FriendsScreenState();
 }
 
-class _FriendsScreenState extends State<FriendsScreen> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+class _FriendsScreenState
+    extends State<FriendsScreen> {
+  final FirebaseAuth _auth =
+      FirebaseAuth.instance;
+
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
-  final TextEditingController _searchController =
-      TextEditingController();
-
   String _searchText = '';
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   Future<void> _sendFriendRequest(
-    String userId,
-    String name,
+    String targetUid,
+    String targetName,
   ) async {
-    final currentUser = _auth.currentUser;
+    final user = _auth.currentUser;
 
-    if (currentUser == null) {
+    if (user == null) {
+      _showMessage('Please login first.');
       return;
     }
 
-    if (currentUser.uid == userId) {
+    if (user.uid == targetUid) {
+      _showMessage(
+        'You cannot add yourself.',
+      );
       return;
     }
 
     try {
-      final requestId =
-          '${currentUser.uid}_$userId';
+      final existingRequest =
+          await _firestore
+              .collection('friendRequests')
+              .where(
+                'senderId',
+                isEqualTo: user.uid,
+              )
+              .where(
+                'receiverId',
+                isEqualTo: targetUid,
+              )
+              .limit(1)
+              .get();
 
-      await _firestore
-          .collection('friendRequests')
-          .doc(requestId)
-          .set({
-        'senderId': currentUser.uid,
-        'receiverId': userId,
+      if (existingRequest.docs.isNotEmpty) {
+        _showMessage(
+          'Friend request already sent.',
+        );
+        return;
+      }
+
+      final request =
+          _firestore
+              .collection('friendRequests')
+              .doc();
+
+      await request.set({
+        'requestId': request.id,
+        'senderId': user.uid,
+        'receiverId': targetUid,
         'senderName':
-            currentUser.displayName ?? 'Friend',
+            user.displayName ?? 'Friend',
+        'receiverName': targetName,
         'status': 'pending',
         'createdAt':
+            FieldValue.serverTimestamp(),
+        'updatedAt':
             FieldValue.serverTimestamp(),
       });
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Friend request sent to $name',
-          ),
-        ),
+      _showMessage(
+        'Friend request sent.',
       );
     } on FirebaseException catch (e) {
-      if (!mounted) return;
+      _showMessage(
+        e.message ??
+            'Could not send friend request.',
+      );
+    } catch (e) {
+      debugPrint(
+        'Friend request error: $e',
+      );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.message ??
-                'Could not send friend request.',
-          ),
-        ),
+      _showMessage(
+        'Could not send friend request.',
       );
     }
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>>
-      _usersStream() {
-    return _firestore
-        .collection('users')
-        .orderBy('name')
-        .limit(50)
-        .snapshots();
-  }
+  Future<void> _acceptRequest(
+    DocumentSnapshot<
+            Map<String, dynamic>>
+        request,
+  ) async {
+    final user = _auth.currentUser;
 
-  bool _matchesSearch(
-    Map<String, dynamic> data,
-  ) {
-    if (_searchText.trim().isEmpty) {
-      return true;
+    if (user == null) {
+      return;
     }
 
-    final search =
-        _searchText.trim().toLowerCase();
+    final data = request.data();
 
-    final name =
-        (data['name'] ?? '').toString().toLowerCase();
+    if (data == null) {
+      return;
+    }
 
-    final email =
-        (data['email'] ?? '').toString().toLowerCase();
+    final senderId =
+        (data['senderId'] ?? '').toString();
 
-    return name.contains(search) ||
-        email.contains(search);
+    if (senderId.isEmpty) {
+      return;
+    }
+
+    try {
+      final batch =
+          _firestore.batch();
+
+      final currentUserFriend =
+          _firestore
+              .collection('users')
+              .doc(user.uid)
+              .collection('friends')
+              .doc(senderId);
+
+      final senderFriend =
+          _firestore
+              .collection('users')
+              .doc(senderId)
+              .collection('friends')
+              .doc(user.uid);
+
+      batch.set(
+        currentUserFriend,
+        {
+          'uid': senderId,
+          'createdAt':
+              FieldValue.serverTimestamp(),
+        },
+      );
+
+      batch.set(
+        senderFriend,
+        {
+          'uid': user.uid,
+          'createdAt':
+              FieldValue.serverTimestamp(),
+        },
+      );
+
+      batch.update(
+        request.reference,
+        {
+          'status': 'accepted',
+          'updatedAt':
+              FieldValue.serverTimestamp(),
+        },
+      );
+
+      await batch.commit();
+
+      if (!mounted) return;
+
+      _showMessage(
+        'Friend request accepted.',
+      );
+    } on FirebaseException catch (e) {
+      _showMessage(
+        e.message ??
+            'Could not accept request.',
+      );
+    } catch (e) {
+      debugPrint(
+        'Accept request error: $e',
+      );
+
+      _showMessage(
+        'Could not accept request.',
+      );
+    }
   }
 
-  Widget _buildUserAvatar(
-    Map<String, dynamic> data,
-  ) {
-    final photoUrl =
-        (data['photoUrl'] ?? '').toString();
+  Future<void> _declineRequest(
+    DocumentSnapshot<
+            Map<String, dynamic>>
+        request,
+  ) async {
+    try {
+      await request.reference.update({
+        'status': 'declined',
+        'updatedAt':
+            FieldValue.serverTimestamp(),
+      });
 
-    if (photoUrl.isNotEmpty) {
+      if (!mounted) return;
+
+      _showMessage(
+        'Friend request declined.',
+      );
+    } catch (e) {
+      debugPrint(
+        'Decline request error: $e',
+      );
+
+      _showMessage(
+        'Could not decline request.',
+      );
+    }
+  }
+
+  Future<void> _removeFriend(
+    String friendUid,
+  ) async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      return;
+    }
+
+    final confirmed =
+        await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title:
+              const Text('Remove Friend'),
+          content: const Text(
+            'Are you sure you want to remove this friend?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(
+                  dialogContext,
+                ).pop(false);
+              },
+              child:
+                  const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(
+                  dialogContext,
+                ).pop(true);
+              },
+              child:
+                  const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      final batch =
+          _firestore.batch();
+
+      final myFriend =
+          _firestore
+              .collection('users')
+              .doc(user.uid)
+              .collection('friends')
+              .doc(friendUid);
+
+      final friendOfMine =
+          _firestore
+              .collection('users')
+              .doc(friendUid)
+              .collection('friends')
+              .doc(user.uid);
+
+      batch.delete(myFriend);
+      batch.delete(friendOfMine);
+
+      await batch.commit();
+
+      if (!mounted) return;
+
+      _showMessage(
+        'Friend removed.',
+      );
+    } catch (e) {
+      debugPrint(
+        'Remove friend error: $e',
+      );
+
+      _showMessage(
+        'Could not remove friend.',
+      );
+    }
+  }
+
+  void _showMessage(
+    String message,
+  ) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
+
+  Widget _avatar(
+    String photoUrl,
+  ) {
+    if (photoUrl.trim().isNotEmpty) {
       return CircleAvatar(
-        radius: 28,
+        radius: 25,
         backgroundImage:
             NetworkImage(photoUrl),
       );
     }
 
     return const CircleAvatar(
-      radius: 28,
+      radius: 25,
       child: Icon(
         Icons.person,
-        size: 30,
       ),
     );
   }
 
-  Widget _buildUserCard(
-    QueryDocumentSnapshot<Map<String, dynamic>>
-        document,
+  Widget _buildFriendRequests(
+    String uid,
   ) {
-    final data = document.data();
+    return StreamBuilder<
+        QuerySnapshot<
+            Map<String, dynamic>>>(
+      stream: _firestore
+          .collection('friendRequests')
+          .where(
+            'receiverId',
+            isEqualTo: uid,
+          )
+          .where(
+            'status',
+            isEqualTo: 'pending',
+          )
+          .orderBy(
+            'createdAt',
+            descending: true,
+          )
+          .snapshots(),
+      builder:
+          (context, snapshot) {
+        if (snapshot.hasError) {
+          return const SizedBox();
+        }
 
-    final userId = document.id;
+        final requests =
+            snapshot.data?.docs ?? [];
 
-    final name =
-        (data['name'] ?? 'Friend').toString();
+        if (requests.isEmpty) {
+          return const SizedBox();
+        }
 
-    final email =
-        (data['email'] ?? '').toString();
+        return Card(
+          child: Padding(
+            padding:
+                const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding:
+                      EdgeInsets.all(8),
+                  child: Text(
+                    'Friend Requests',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+                ),
+                ...requests.map(
+                  (request) {
+                    final data =
+                        request.data();
 
-    final currentUser =
-        _auth.currentUser;
+                    final name =
+                        (data['senderName'] ??
+                                'Friend')
+                            .toString();
 
-    if (currentUser != null &&
-        currentUser.uid == userId) {
-      return const SizedBox.shrink();
+                    final senderId =
+                        (data['senderId'] ??
+                                '')
+                            .toString();
+
+                    return ListTile(
+                      leading:
+                          const CircleAvatar(
+                        child: Icon(
+                          Icons.person,
+                        ),
+                      ),
+                      title:
+                          Text(name),
+                      subtitle:
+                          const Text(
+                        'Wants to be your friend',
+                      ),
+                      trailing:
+                          Row(
+                        mainAxisSize:
+                            MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip:
+                                'Accept',
+                            onPressed:
+                                () {
+                              _acceptRequest(
+                                request,
+                              );
+                            },
+                            icon:
+                                const Icon(
+                              Icons
+                                  .check_circle_outline,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip:
+                                'Decline',
+                            onPressed:
+                                () {
+                              _declineRequest(
+                                request,
+                              );
+                            },
+                            icon:
+                                const Icon(
+                              Icons
+                                  .cancel_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFriendsList(
+    String uid,
+  ) {
+    return StreamBuilder<
+        QuerySnapshot<
+            Map<String, dynamic>>>(
+      stream: _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('friends')
+          .snapshots(),
+      builder:
+          (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Padding(
+            padding:
+                EdgeInsets.all(20),
+            child: Text(
+              'Could not load friends.',
+            ),
+          );
+        }
+
+        if (snapshot.connectionState ==
+            ConnectionState.waiting) {
+          return const Padding(
+            padding:
+                EdgeInsets.all(30),
+            child: Center(
+              child:
+                  CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        final friends =
+            snapshot.data?.docs ?? [];
+
+        if (friends.isEmpty) {
+          return const Card(
+            child: Padding(
+              padding:
+                  EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  'You have no friends yet.',
+                  textAlign:
+                      TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding:
+                  EdgeInsets.symmetric(
+                vertical: 12,
+              ),
+              child: Text(
+                'My Friends',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+            ),
+            ...friends.map(
+              (friend) {
+                final friendUid =
+                    friend.id;
+
+                return FutureBuilder<
+                    DocumentSnapshot<
+                        Map<String,
+                            dynamic>>>(
+                  future: _firestore
+                      .collection('users')
+                      .doc(friendUid)
+                      .get(),
+                  builder:
+                      (
+                    context,
+                    userSnapshot,
+                  ) {
+                    if (!userSnapshot
+                        .hasData) {
+                      return const SizedBox();
+                    }
+
+                    final data =
+                        userSnapshot
+                            .data!
+                            .data();
+
+                    if (data == null) {
+                      return const SizedBox();
+                    }
+
+                    final name =
+                        (data['name'] ??
+                                'Friend')
+                            .toString();
+
+                    final photoUrl =
+                        (data['photoUrl'] ??
+                                '')
+                            .toString();
+
+                    return Card(
+                      margin:
+                          const EdgeInsets
+                              .only(
+                        bottom: 10,
+                      ),
+                      child: ListTile(
+                        leading:
+                            _avatar(
+                          photoUrl,
+                        ),
+                        title:
+                            Text(
+                          name,
+                          style:
+                              const TextStyle(
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                        subtitle:
+                            Text(
+                          (data['email'] ??
+                                  '')
+                              .toString(),
+                        ),
+                        trailing:
+                            PopupMenuButton<
+                                String>(
+                          onSelected:
+                              (value) {
+                            if (value ==
+                                'remove') {
+                              _removeFriend(
+                                friendUid,
+                              );
+                            }
+                          },
+                          itemBuilder:
+                              (
+                            context,
+                          ) {
+                            return const [
+                              PopupMenuItem(
+                                value:
+                                    'remove',
+                                child:
+                                    Row(
+                                  children: [
+                                    Icon(
+                                      Icons
+                                          .person_remove_outlined,
+                                    ),
+                                    SizedBox(
+                                      width:
+                                          8,
+                                    ),
+                                    Text(
+                                      'Remove Friend',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ];
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchUsers(
+    String uid,
+  ) {
+    if (_searchText.trim().isEmpty) {
+      return const SizedBox();
     }
 
-    return Card(
-      margin: const EdgeInsets.only(
-        bottom: 10,
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 6,
-        ),
-        leading: _buildUserAvatar(data),
-        title: Text(
-          name,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: email.isEmpty
-            ? const Text('Friend Post user')
-            : Text(email),
-        trailing: FilledButton.icon(
-          onPressed: () {
-            _sendFriendRequest(
-              userId,
-              name,
-            );
+    return StreamBuilder<
+        QuerySnapshot<
+            Map<String, dynamic>>>(
+      stream: _firestore
+          .collection('users')
+          .limit(50)
+          .snapshots(),
+      builder:
+          (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Padding(
+            padding:
+                EdgeInsets.all(20),
+            child: Text(
+              'Could not search users.',
+            ),
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding:
+                EdgeInsets.all(20),
+            child: Center(
+              child:
+                  CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        final search =
+            _searchText
+                .trim()
+                .toLowerCase();
+
+        final users =
+            snapshot.data!.docs.where(
+          (doc) {
+            if (doc.id == uid) {
+              return false;
+            }
+
+            final data =
+                doc.data();
+
+            final name =
+                (data['name'] ??
+                        '')
+                    .toString()
+                    .toLowerCase();
+
+            final email =
+                (data['email'] ??
+                        '')
+                    .toString()
+                    .toLowerCase();
+
+            return name.contains(search) ||
+                email.contains(search);
           },
-          icon: const Icon(
-            Icons.person_add_alt_1,
-            size: 18,
-          ),
-          label: const Text('Add'),
-        ),
-      ),
+        ).toList();
+
+        if (users.isEmpty) {
+          return const Padding(
+            padding:
+                EdgeInsets.all(24),
+            child: Center(
+              child: Text(
+                'No users found.',
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding:
+                  EdgeInsets.symmetric(
+                vertical: 12,
+              ),
+              child: Text(
+                'Search Results',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+            ),
+            ...users.map(
+              (doc) {
+                final data =
+                    doc.data();
+
+                final name =
+                    (data['name'] ??
+                            'Friend')
+                        .toString();
+
+                final email =
+                    (data['email'] ??
+                            '')
+                        .toString();
+
+                final photoUrl =
+                    (data['photoUrl'] ??
+                            '')
+                        .toString();
+
+                return Card(
+                  margin:
+                      const EdgeInsets
+                          .only(
+                    bottom: 10,
+                  ),
+                  child: ListTile(
+                    leading:
+                        _avatar(
+                      photoUrl,
+                    ),
+                    title:
+                        Text(
+                      name,
+                      style:
+                          const TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                    subtitle:
+                        Text(email),
+                    trailing:
+                        FilledButton(
+                      onPressed: () {
+                        _sendFriendRequest(
+                          doc.id,
+                          name,
+                        );
+                      },
+                      child:
+                          const Text(
+                        'Add Friend',
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
+    final user =
+        _auth.currentUser;
+
+    if (user == null) {
+      return const Scaffold(
+        body: Center(
+          child: Text(
+            'Please login first.',
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Friends',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding:
-                const EdgeInsets.fromLTRB(
-              16,
-              12,
-              16,
-              8,
-            ),
-            child: TextField(
-              controller: _searchController,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {});
+        },
+        child: ListView(
+          padding:
+              const EdgeInsets.all(16),
+          children: [
+            TextField(
               onChanged: (value) {
                 setState(() {
-                  _searchText = value;
+                  _searchText =
+                      value;
                 });
               },
-              decoration: InputDecoration(
+              decoration:
+                  InputDecoration(
                 hintText:
-                    'Search friends...',
-                prefixIcon: const Icon(
+                    'Search people...',
+                prefixIcon:
+                    const Icon(
                   Icons.search,
                 ),
                 suffixIcon:
-                    _searchText.isNotEmpty
+                    _searchText
+                            .isNotEmpty
                         ? IconButton(
                             onPressed: () {
-                              _searchController
-                                  .clear();
-
                               setState(() {
-                                _searchText = '';
+                                _searchText =
+                                    '';
                               });
                             },
-                            icon: const Icon(
+                            icon:
+                                const Icon(
                               Icons.clear,
                             ),
                           )
                         : null,
-                border: OutlineInputBorder(
+                border:
+                    OutlineInputBorder(
                   borderRadius:
-                      BorderRadius.circular(14),
+                      BorderRadius.circular(
+                    14,
+                  ),
                 ),
               ),
             ),
-          ),
 
-          Expanded(
-            child: StreamBuilder<
-                QuerySnapshot<
-                    Map<String, dynamic>>>(
-              stream: _usersStream(),
-              builder:
-                  (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.all(
-                        24,
-                      ),
-                      child: Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            size: 55,
-                          ),
-                          const SizedBox(
-                            height: 12,
-                          ),
-                          const Text(
-                            'Could not load users.',
-                            textAlign:
-                                TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(
-                            height: 8,
-                          ),
-                          Text(
-                            '${snapshot.error}',
-                            textAlign:
-                                TextAlign.center,
-                            style:
-                                const TextStyle(
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                if (snapshot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Center(
-                    child:
-                        CircularProgressIndicator(),
-                  );
-                }
-
-                final documents =
-                    snapshot.data?.docs ?? [];
-
-                final filtered =
-                    documents.where((doc) {
-                  return _matchesSearch(
-                    doc.data(),
-                  );
-                }).toList();
-
-                if (filtered.isEmpty) {
-                  return RefreshIndicator(
-                    onRefresh: () async {
-                      setState(() {});
-                    },
-                    child: ListView(
-                      children: const [
-                        SizedBox(
-                          height: 180,
-                        ),
-                        Center(
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.people_outline,
-                                size: 70,
-                              ),
-                              SizedBox(
-                                height: 14,
-                              ),
-                              Text(
-                                'No friends found.',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight:
-                                      FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(
-                                height: 6,
-                              ),
-                              Text(
-                                'Try another search.',
-                                style:
-                                    TextStyle(
-                                  color:
-                                      Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    setState(() {});
-                  },
-                  child: ListView.builder(
-                    padding:
-                        const EdgeInsets.fromLTRB(
-                      16,
-                      8,
-                      16,
-                      20,
-                    ),
-                    itemCount:
-                        filtered.length,
-                    itemBuilder:
-                        (context, index) {
-                      return _buildUserCard(
-                        filtered[index],
-                      );
-                    },
-                  ),
-                );
-              },
+            const SizedBox(
+              height: 16,
             ),
-          ),
-        ],
+
+            _buildSearchUsers(
+              user.uid,
+            ),
+
+            _buildFriendRequests(
+              user.uid,
+            ),
+
+            _buildFriendsList(
+              user.uid,
+            ),
+          ],
+        ),
       ),
     );
   }
