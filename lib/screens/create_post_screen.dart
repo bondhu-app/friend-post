@@ -23,38 +23,79 @@ class _CreatePostScreenState
 
   bool _isPosting = false;
 
+  String _userName = 'Friend';
+  String _userPhotoUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
   @override
   void dispose() {
     _textController.dispose();
     super.dispose();
   }
 
-  Future<void> _createPost() async {
-    final text =
-        _textController.text.trim();
+  Future<void> _loadUserData() async {
+    final user = _auth.currentUser;
 
-    if (text.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please write something first.',
-          ),
-        ),
+    if (user == null) return;
+
+    try {
+      final document = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final data = document.data();
+
+      if (!mounted) return;
+
+      setState(() {
+        _userName = (data?['name'] ??
+                user.displayName ??
+                'Friend')
+            .toString();
+
+        _userPhotoUrl =
+            (data?['photoUrl'] ?? '')
+                .toString();
+      });
+    } catch (e) {
+      debugPrint(
+        'Load user data error: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _userName =
+            user.displayName ?? 'Friend';
+
+        _userPhotoUrl =
+            user.photoURL ?? '';
+      });
+    }
+  }
+
+  Future<void> _createPost() async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      _showMessage(
+        'Please login first.',
       );
       return;
     }
 
-    final user = _auth.currentUser;
+    final text =
+        _textController.text.trim();
 
-    if (user == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please login first.',
-          ),
-        ),
+    if (text.isEmpty) {
+      _showMessage(
+        'Please write something first.',
       );
       return;
     }
@@ -63,73 +104,58 @@ class _CreatePostScreenState
       return;
     }
 
+    FocusScope.of(context).unfocus();
+
     setState(() {
       _isPosting = true;
     });
 
     try {
-      String userName =
-          user.displayName ?? 'Friend';
-
-      String photoUrl = '';
-
-      try {
-        final userDoc =
-            await _firestore
-                .collection('users')
-                .doc(user.uid)
-                .get();
-
-        final userData =
-            userDoc.data();
-
-        if (userData != null) {
-          final savedName =
-              userData['name'];
-
-          final savedPhoto =
-              userData['photoUrl'];
-
-          if (savedName != null &&
-              savedName
-                  .toString()
-                  .trim()
-                  .isNotEmpty) {
-            userName =
-                savedName.toString();
-          }
-
-          if (savedPhoto != null) {
-            photoUrl =
-                savedPhoto.toString();
-          }
-        }
-      } catch (e) {
-        debugPrint(
-          'Could not load user data: $e',
-        );
-      }
-
-      final postRef =
+      final postReference =
           _firestore
               .collection('posts')
               .doc();
 
-      await postRef.set({
-        'postId': postRef.id,
-        'uid': user.uid,
-        'userId': user.uid,
-        'userName': userName,
-        'name': userName,
-        'photoUrl': photoUrl,
-        'text': text,
-        'content': text,
-        'imageUrl': '',
-        'likeCount': 0,
-        'commentCount': 0,
-        'likes': 0,
+      await postReference.set({
+        'postId':
+            postReference.id,
+
+        'uid':
+            user.uid,
+
+        'userId':
+            user.uid,
+
+        'userName':
+            _userName,
+
+        'name':
+            _userName,
+
+        'photoUrl':
+            _userPhotoUrl,
+
+        'text':
+            text,
+
+        'content':
+            text,
+
+        'imageUrl':
+            '',
+
+        'likeCount':
+            0,
+
+        'likes':
+            0,
+
+        'commentCount':
+            0,
+
         'createdAt':
             FieldValue.serverTimestamp(),
+
         'updatedAt':
             FieldValue.serverTimestamp(),
       });
@@ -146,50 +172,25 @@ class _CreatePostScreenState
         });
       } catch (e) {
         debugPrint(
-          'Could not update post count: $e',
+          'Post count update error: $e',
         );
       }
 
       if (!mounted) return;
 
-      _textController.clear();
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Post published successfully!',
-          ),
-        ),
-      );
-
       Navigator.of(context).pop(true);
     } on FirebaseException catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        SnackBar(
-          content: Text(
-            e.message ??
-                'Could not publish the post.',
-          ),
-        ),
+      _showMessage(
+        e.message ??
+            'Could not create post.',
       );
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not publish the post. Please try again.',
-          ),
-        ),
-      );
-
       debugPrint(
         'Create post error: $e',
+      );
+
+      _showMessage(
+        'Could not create post. Please try again.',
       );
     } finally {
       if (mounted) {
@@ -200,97 +201,41 @@ class _CreatePostScreenState
     }
   }
 
-  Future<void> _showPostOptions() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(
-                  Icons.photo_outlined,
-                ),
-                title: const Text(
-                  'Add photo',
-                ),
-                onTap: () {
-                  Navigator.of(
-                    sheetContext,
-                  ).pop();
+  void _showMessage(
+    String message,
+  ) {
+    if (!mounted) return;
 
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Photo upload will be added next.',
-                      ),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.emoji_emotions_outlined,
-                ),
-                title: const Text(
-                  'Add feeling',
-                ),
-                onTap: () {
-                  Navigator.of(
-                    sheetContext,
-                  ).pop();
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
 
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Feeling feature will be added next.',
-                      ),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.location_on_outlined,
-                ),
-                title: const Text(
-                  'Add location',
-                ),
-                onTap: () {
-                  Navigator.of(
-                    sheetContext,
-                  ).pop();
+  Widget _buildAvatar() {
+    if (_userPhotoUrl.trim().isNotEmpty) {
+      return CircleAvatar(
+        radius: 25,
+        backgroundImage:
+            NetworkImage(_userPhotoUrl),
+      );
+    }
 
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Location feature will be added next.',
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
+    return const CircleAvatar(
+      radius: 25,
+      child: Icon(
+        Icons.person,
+        size: 28,
+      ),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
-    final user =
-        _auth.currentUser;
-
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -304,9 +249,9 @@ class _CreatePostScreenState
           Padding(
             padding:
                 const EdgeInsets.only(
-              right: 8,
+              right: 10,
             ),
-            child: TextButton(
+            child: FilledButton(
               onPressed:
                   _isPosting
                       ? null
@@ -321,156 +266,172 @@ class _CreatePostScreenState
                       ),
                     )
                   : const Text(
-                      'POST',
-                      style: TextStyle(
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
+                      'Post',
                     ),
             ),
           ),
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 25,
-                          backgroundImage:
-                              user?.photoURL !=
-                                      null
-                                  ? NetworkImage(
-                                      user!.photoURL!,
-                                    )
-                                  : null,
-                          child:
-                              user?.photoURL ==
-                                      null
-                                  ? const Icon(
-                                      Icons.person,
-                                    )
-                                  : null,
-                        ),
-                        const SizedBox(
-                          width: 12,
-                        ),
-                        Expanded(
-                          child: Text(
-                            user?.displayName
-                                    ?.trim()
-                                    .isNotEmpty ==
-                                true
-                                ? user!
-                                    .displayName!
-                                : 'Friend',
-                            style:
-                                const TextStyle(
-                              fontSize: 17,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(
-                      height: 20,
-                    ),
-                    TextField(
-                      controller:
-                          _textController,
-                      autofocus: true,
-                      maxLines: null,
-                      minLines: 8,
-                      textCapitalization:
-                          TextCapitalization
-                              .sentences,
-                      decoration:
-                          const InputDecoration(
-                        hintText:
-                            'What\'s on your mind?',
-                        border:
-                            InputBorder.none,
-                        hintStyle:
-                            TextStyle(
-                          fontSize: 20,
-                          color: Colors.grey,
-                        ),
-                      ),
+        child: SingleChildScrollView(
+          padding:
+              const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _buildAvatar(),
+                  const SizedBox(
+                    width: 12,
+                  ),
+                  Expanded(
+                    child: Text(
+                      _userName,
                       style:
                           const TextStyle(
-                        fontSize: 20,
+                        fontSize: 18,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(
+                height: 22,
+              ),
+
+              TextField(
+                controller:
+                    _textController,
+                autofocus: true,
+                minLines: 7,
+                maxLines: 15,
+                textCapitalization:
+                    TextCapitalization
+                        .sentences,
+                decoration:
+                    const InputDecoration(
+                  hintText:
+                      'What\'s on your mind?',
+                  border:
+                      InputBorder.none,
+                ),
+                style:
+                    const TextStyle(
+                  fontSize: 20,
+                  height: 1.45,
+                ),
+              ),
+
+              const Divider(
+                height: 30,
+              ),
+
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading:
+                          const Icon(
+                        Icons
+                            .photo_outlined,
+                      ),
+                      title: const Text(
+                        'Photo / Video',
+                      ),
+                      subtitle:
+                          const Text(
+                        'Photo upload will be added next.',
+                      ),
+                      onTap: () {
+                        _showMessage(
+                          'Photo upload will be added next.',
+                        );
+                      },
+                    ),
+                    const Divider(
+                      height: 1,
+                    ),
+                    ListTile(
+                      leading:
+                          const Icon(
+                        Icons
+                            .emoji_emotions_outlined,
+                      ),
+                      title: const Text(
+                        'Feeling / Activity',
+                      ),
+                      onTap: () {
+                        _showMessage(
+                          'Feeling feature will be added next.',
+                        );
+                      },
+                    ),
+                    const Divider(
+                      height: 1,
+                    ),
+                    ListTile(
+                      leading:
+                          const Icon(
+                        Icons
+                            .location_on_outlined,
+                      ),
+                      title: const Text(
+                        'Check in',
+                      ),
+                      onTap: () {
+                        _showMessage(
+                          'Check-in feature will be added next.',
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
-            ),
-            Container(
-              decoration:
-                  BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: Theme.of(
-                      context,
-                    )
-                        .dividerColor,
-                  ),
-                ),
+
+              const SizedBox(
+                height: 24,
               ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 6,
+
+              SizedBox(
+                width:
+                    double.infinity,
+                height: 52,
+                child: FilledButton.icon(
+                  onPressed:
+                      _isPosting
+                          ? null
+                          : _createPost,
+                  icon: const Icon(
+                    Icons.send_rounded,
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child:
-                            TextButton.icon(
-                          onPressed:
-                              _isPosting
-                                  ? null
-                                  : _showPostOptions,
-                          icon: const Icon(
-                            Icons
-                                .add_circle_outline,
+                  label: _isPosting
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child:
+                              CircularProgressIndicator(
+                            strokeWidth: 2,
                           ),
-                          label: const Text(
-                            'Add to post',
+                        )
+                      : const Text(
+                          'Publish Post',
+                          style:
+                              TextStyle(
+                            fontSize: 16,
+                            fontWeight:
+                                FontWeight
+                                    .bold,
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed:
-                            _isPosting
-                                ? null
-                                : _createPost,
-                        tooltip:
-                            'Publish post',
-                        icon: const Icon(
-                          Icons.send_rounded,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
