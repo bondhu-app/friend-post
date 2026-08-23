@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'friends_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -10,12 +11,28 @@ class HomeScreen extends StatelessWidget {
     await FirebaseAuth.instance.signOut();
   }
 
+  void _openScreen(
+    BuildContext context,
+    Widget screen,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => screen,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
     final displayName = user?.displayName?.trim();
     final email = user?.email ?? '';
+
+    final welcomeName =
+        displayName != null && displayName.isNotEmpty
+            ? ', $displayName'
+            : '';
 
     return Scaffold(
       appBar: AppBar(
@@ -37,12 +54,14 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+
       body: RefreshIndicator(
         onRefresh: () async {
           await Future<void>.delayed(
             const Duration(milliseconds: 500),
           );
         },
+
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
@@ -68,7 +87,7 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             Text(
-              'Welcome${displayName != null && displayName.isNotEmpty ? ', $displayName' : ''}!',
+              'Welcome$welcomeName!',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 26,
@@ -91,10 +110,13 @@ class HomeScreen extends StatelessWidget {
 
             Card(
               child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 leading: CircleAvatar(
-                  backgroundColor: Colors.blue.withValues(
-                    alpha: 0.12,
-                  ),
+                  backgroundColor:
+                      Colors.blue.withValues(alpha: 0.12),
                   child: const Icon(
                     Icons.home_rounded,
                     color: Colors.blue,
@@ -116,10 +138,13 @@ class HomeScreen extends StatelessWidget {
 
             Card(
               child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 leading: CircleAvatar(
-                  backgroundColor: Colors.blue.withValues(
-                    alpha: 0.12,
-                  ),
+                  backgroundColor:
+                      Colors.blue.withValues(alpha: 0.12),
                   child: const Icon(
                     Icons.person_rounded,
                     color: Colors.blue,
@@ -134,11 +159,13 @@ class HomeScreen extends StatelessWidget {
                 subtitle: const Text(
                   'View and manage your profile',
                 ),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                ),
                 onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ProfileScreen(),
-                    ),
+                  _openScreen(
+                    context,
+                    const ProfileScreen(),
                   );
                 },
               ),
@@ -148,10 +175,50 @@ class HomeScreen extends StatelessWidget {
 
             Card(
               child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 leading: CircleAvatar(
-                  backgroundColor: Colors.blue.withValues(
-                    alpha: 0.12,
+                  backgroundColor:
+                      Colors.blue.withValues(alpha: 0.12),
+                  child: const Icon(
+                    Icons.people_alt_rounded,
+                    color: Colors.blue,
                   ),
+                ),
+                title: const Text(
+                  'Friends',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Find and connect with friends',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                ),
+                onTap: () {
+                  _openScreen(
+                    context,
+                    const FriendsScreen(),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                leading: CircleAvatar(
+                  backgroundColor:
+                      Colors.blue.withValues(alpha: 0.12),
                   child: const Icon(
                     Icons.post_add_rounded,
                     color: Colors.blue,
@@ -165,6 +232,9 @@ class HomeScreen extends StatelessWidget {
                 ),
                 subtitle: const Text(
                   'Share something with your friends',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
                 ),
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -182,44 +252,13 @@ class HomeScreen extends StatelessWidget {
 
             Card(
               child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 leading: CircleAvatar(
-                  backgroundColor: Colors.blue.withValues(
-                    alpha: 0.12,
-                  ),
-                  child: const Icon(
-                    Icons.people_alt_rounded,
-                    color: Colors.blue,
-                  ),
-                ),
-                title: const Text(
-                  'Friends',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                subtitle: const Text(
-                  'Find and connect with friends',
-                ),
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Friends section will be added next.',
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.blue.withValues(
-                    alpha: 0.12,
-                  ),
+                  backgroundColor:
+                      Colors.blue.withValues(alpha: 0.12),
                   child: const Icon(
                     Icons.settings_rounded,
                     color: Colors.blue,
@@ -233,6 +272,9 @@ class HomeScreen extends StatelessWidget {
                 ),
                 subtitle: const Text(
                   'Manage your account settings',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
                 ),
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
