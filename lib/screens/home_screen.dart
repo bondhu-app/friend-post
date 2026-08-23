@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'create_post_screen.dart';
 import 'friends_screen.dart';
 import 'profile_screen.dart';
 
@@ -64,14 +65,31 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Load user data error: $e');
+      debugPrint(
+        'Load user data error: $e',
+      );
 
       if (!mounted) return;
 
       setState(() {
-        _userName = user.displayName ?? 'Friend';
+        _userName =
+            user.displayName ?? 'Friend';
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _openCreatePost() async {
+    final result =
+        await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            const CreatePostScreen(),
+      ),
+    );
+
+    if (result == true && mounted) {
+      await _loadUserData();
     }
   }
 
@@ -87,13 +105,17 @@ class _HomeScreenState extends State<HomeScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop(false);
+                Navigator.of(
+                  dialogContext,
+                ).pop(false);
               },
               child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop(true);
+                Navigator.of(
+                  dialogContext,
+                ).pop(true);
               },
               child: const Text('Logout'),
             ),
@@ -109,16 +131,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      Navigator.of(context).pushNamedAndRemoveUntil(
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil(
         '/',
         (route) => false,
       );
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
-          content: Text('Logout failed: $e'),
+          content: Text(
+            'Logout failed: $e',
+          ),
         ),
       );
     }
@@ -130,7 +156,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_userPhotoUrl.isNotEmpty) {
       return CircleAvatar(
         radius: radius,
-        backgroundImage: NetworkImage(_userPhotoUrl),
+        backgroundImage:
+            NetworkImage(_userPhotoUrl),
       );
     }
 
@@ -169,7 +196,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       _userName,
                       style: const TextStyle(
                         fontSize: 21,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
                   ],
@@ -177,8 +205,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               IconButton(
                 onPressed: () {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(
                     const SnackBar(
                       content: Text(
                         'Notifications coming soon.',
@@ -187,15 +216,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
                 icon: const Icon(
-                  Icons.notifications_outlined,
+                  Icons
+                      .notifications_outlined,
                 ),
               ),
             ],
           ),
+
           const SizedBox(height: 20),
+
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(18),
+              padding:
+                  const EdgeInsets.all(18),
               child: Column(
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
@@ -204,29 +237,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     'What\'s on your mind?',
                     style: TextStyle(
                       fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                      fontWeight:
+                          FontWeight.w600,
                     ),
                   ),
+
                   const SizedBox(height: 14),
+
                   Row(
                     children: [
                       _avatar(radius: 22),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(
-                              context,
-                            ).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Create post coming soon.',
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Align(
-                            alignment: Alignment.centerLeft,
+                        child:
+                            OutlinedButton(
+                          onPressed:
+                              _openCreatePost,
+                          child:
+                              const Align(
+                            alignment:
+                                Alignment
+                                    .centerLeft,
                             child: Text(
                               'Write something...',
                             ),
@@ -235,46 +266,39 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 10),
+
                   Row(
                     children: [
                       Expanded(
-                        child: TextButton.icon(
-                          onPressed: () {
-                            ScaffoldMessenger.of(
-                              context,
-                            ).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Photo post coming soon.',
-                                ),
-                              ),
-                            );
-                          },
+                        child:
+                            TextButton.icon(
+                          onPressed:
+                              _openCreatePost,
                           icon: const Icon(
-                            Icons.photo_outlined,
+                            Icons
+                                .photo_outlined,
                           ),
-                          label: const Text('Photo'),
+                          label:
+                              const Text(
+                            'Photo',
+                          ),
                         ),
                       ),
                       Expanded(
-                        child: TextButton.icon(
-                          onPressed: () {
-                            ScaffoldMessenger.of(
-                              context,
-                            ).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Feeling feature coming soon.',
-                                ),
-                              ),
-                            );
-                          },
+                        child:
+                            TextButton.icon(
+                          onPressed:
+                              _openCreatePost,
                           icon: const Icon(
                             Icons
                                 .emoji_emotions_outlined,
                           ),
-                          label: const Text('Feeling'),
+                          label:
+                              const Text(
+                            'Feeling',
+                          ),
                         ),
                       ),
                     ],
@@ -283,7 +307,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+
           const SizedBox(height: 18),
+
           Row(
             children: [
               const Expanded(
@@ -291,7 +317,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Recent Posts',
                   style: TextStyle(
                     fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                   ),
                 ),
               ),
@@ -307,13 +334,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: const Icon(
                   Icons.people_outline,
                 ),
-                label: const Text('Friends'),
+                label:
+                    const Text('Friends'),
               ),
             ],
           ),
+
           const SizedBox(height: 12),
+
           StreamBuilder<
-              QuerySnapshot<Map<String, dynamic>>>(
+              QuerySnapshot<
+                  Map<String, dynamic>>>(
             stream: _firestore
                 .collection('posts')
                 .orderBy(
@@ -322,20 +353,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
                 .limit(20)
                 .snapshots(),
-            builder: (context, snapshot) {
+            builder:
+                (context, snapshot) {
               if (snapshot.hasError) {
-                return const Card(
+                return Card(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
+                    padding:
+                        const EdgeInsets.all(
+                      24,
+                    ),
                     child: Column(
                       children: [
-                        Icon(
-                          Icons.article_outlined,
+                        const Icon(
+                          Icons
+                              .article_outlined,
                           size: 48,
                         ),
-                        SizedBox(height: 10),
+                        const SizedBox(
+                          height: 10,
+                        ),
                         Text(
-                          'No posts available yet.',
+                          'Could not load posts.',
+                          style:
+                              Theme.of(
+                            context,
+                          )
+                                  .textTheme
+                                  .titleMedium,
+                        ),
+                        const SizedBox(
+                          height: 6,
+                        ),
+                        const Text(
+                          'Check your Firebase configuration and Firestore rules.',
+                          textAlign:
+                              TextAlign.center,
                         ),
                       ],
                     ),
@@ -347,7 +399,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ConnectionState.waiting) {
                 return const Center(
                   child: Padding(
-                    padding: EdgeInsets.all(30),
+                    padding:
+                        EdgeInsets.all(30),
                     child:
                         CircularProgressIndicator(),
                   ),
@@ -360,7 +413,8 @@ class _HomeScreenState extends State<HomeScreen> {
               if (posts.isEmpty) {
                 return const Card(
                   child: Padding(
-                    padding: EdgeInsets.all(25),
+                    padding:
+                        EdgeInsets.all(25),
                     child: Column(
                       children: [
                         Icon(
@@ -380,7 +434,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         SizedBox(height: 6),
                         Text(
                           'Be the first person to create a post.',
-                          textAlign: TextAlign.center,
+                          textAlign:
+                              TextAlign.center,
                           style: TextStyle(
                             color: Colors.grey,
                           ),
@@ -423,22 +478,29 @@ class _HomeScreenState extends State<HomeScreen> {
             .toString();
 
     final imageUrl =
-        (data['imageUrl'] ?? '').toString();
+        (data['imageUrl'] ?? '')
+            .toString();
 
     final photoUrl =
-        (data['photoUrl'] ?? '').toString();
+        (data['photoUrl'] ?? '')
+            .toString();
 
     final likes =
         data['likeCount'] ??
             data['likes'] ??
             0;
 
+    final comments =
+        data['commentCount'] ?? 0;
+
     return Card(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 14,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding:
+            const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
@@ -449,46 +511,67 @@ class _HomeScreenState extends State<HomeScreen> {
                   CircleAvatar(
                     radius: 22,
                     backgroundImage:
-                        NetworkImage(photoUrl),
+                        NetworkImage(
+                      photoUrl,
+                    ),
                   )
                 else
                   const CircleAvatar(
                     radius: 22,
-                    child: Icon(Icons.person),
+                    child: Icon(
+                      Icons.person,
+                    ),
                   ),
+
                 const SizedBox(width: 12),
+
                 Expanded(
                   child: Text(
                     name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
+                    style:
+                        const TextStyle(
+                      fontWeight:
+                          FontWeight.bold,
                       fontSize: 16,
                     ),
                   ),
                 ),
-                const Icon(Icons.more_horiz),
+
+                const Icon(
+                  Icons.more_horiz,
+                ),
               ],
             ),
+
             if (text.isNotEmpty) ...[
               const SizedBox(height: 14),
               Text(
                 text,
-                style: const TextStyle(
+                style:
+                    const TextStyle(
                   fontSize: 16,
                 ),
               ),
             ],
+
             if (imageUrl.isNotEmpty) ...[
               const SizedBox(height: 14),
               ClipRRect(
                 borderRadius:
-                    BorderRadius.circular(12),
+                    BorderRadius.circular(
+                  12,
+                ),
                 child: Image.network(
                   imageUrl,
-                  width: double.infinity,
+                  width:
+                      double.infinity,
                   fit: BoxFit.cover,
                   errorBuilder:
-                      (context, error, stackTrace) {
+                      (
+                    context,
+                    error,
+                    stackTrace,
+                  ) {
                     return const SizedBox(
                       height: 180,
                       child: Center(
@@ -503,29 +586,49 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+
             const SizedBox(height: 10),
+
             Row(
               children: [
                 Text(
                   '$likes likes',
-                  style: const TextStyle(
+                  style:
+                      const TextStyle(
                     color: Colors.grey,
                   ),
                 ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons.favorite_border,
+
+                const SizedBox(width: 12),
+
+                Text(
+                  '$comments comments',
+                  style:
+                      const TextStyle(
+                    color: Colors.grey,
                   ),
-                  label: const Text('Like'),
                 ),
+
+                const Spacer(),
+
                 TextButton.icon(
                   onPressed: () {},
                   icon: const Icon(
-                    Icons.comment_outlined,
+                    Icons
+                        .favorite_border,
                   ),
-                  label: const Text('Comment'),
+                  label:
+                      const Text('Like'),
+                ),
+
+                TextButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons
+                        .comment_outlined,
+                  ),
+                  label:
+                      const Text('Comment'),
                 ),
               ],
             ),
@@ -537,52 +640,67 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _settingsPage() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding:
+          const EdgeInsets.all(16),
       children: [
         const Text(
           'Settings',
           style: TextStyle(
             fontSize: 26,
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
+
         const SizedBox(height: 20),
+
         Card(
           child: Column(
             children: [
               ListTile(
                 leading: const Icon(
-                  Icons.notifications_outlined,
+                  Icons
+                      .notifications_outlined,
                 ),
-                title: const Text('Notifications'),
+                title: const Text(
+                  'Notifications',
+                ),
                 trailing: const Icon(
                   Icons.chevron_right,
                 ),
                 onTap: () {},
               ),
+
               const Divider(height: 1),
+
               ListTile(
                 leading: const Icon(
                   Icons.lock_outline,
                 ),
-                title: const Text('Privacy'),
+                title:
+                    const Text('Privacy'),
                 trailing: const Icon(
                   Icons.chevron_right,
                 ),
                 onTap: () {},
               ),
+
               const Divider(height: 1),
+
               ListTile(
                 leading: const Icon(
                   Icons.security_outlined,
                 ),
-                title: const Text('Security'),
+                title:
+                    const Text('Security'),
                 trailing: const Icon(
                   Icons.chevron_right,
                 ),
                 onTap: () {},
               ),
+
               const Divider(height: 1),
+
               ListTile(
                 leading: const Icon(
                   Icons.info_outline,
@@ -603,10 +721,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
+
               const Divider(height: 1),
+
               ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Logout'),
+                leading: const Icon(
+                  Icons.logout,
+                ),
+                title:
+                    const Text('Logout'),
                 onTap: _logout,
               ),
             ],
@@ -620,12 +743,16 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (_currentIndex) {
       case 0:
         return _homePage();
+
       case 1:
         return const FriendsScreen();
+
       case 2:
         return const ProfileScreen();
+
       case 3:
         return _settingsPage();
+
       default:
         return _homePage();
     }
@@ -635,12 +762,16 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (_currentIndex) {
       case 0:
         return 'Friend Post';
+
       case 1:
         return 'Friends';
+
       case 2:
         return 'My Profile';
+
       case 3:
         return 'Settings';
+
       default:
         return 'Friend Post';
     }
@@ -651,7 +782,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isLoading) {
       return const Scaffold(
         body: Center(
-          child: CircularProgressIndicator(),
+          child:
+              CircularProgressIndicator(),
         ),
       );
     }
@@ -661,63 +793,80 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(
           _title(),
           style: const TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
         actions: [
           if (_currentIndex == 0)
             IconButton(
-              onPressed: _loadUserData,
-              icon: const Icon(Icons.refresh),
+              onPressed:
+                  _loadUserData,
+              icon: const Icon(
+                Icons.refresh,
+              ),
             ),
         ],
       ),
+
       body: _currentPage(),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
+
+      bottomNavigationBar:
+          NavigationBar(
+        selectedIndex:
+            _currentIndex,
+        onDestinationSelected:
+            (index) {
           setState(() {
             _currentIndex = index;
           });
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            icon: Icon(
+              Icons.home_outlined,
+            ),
+            selectedIcon:
+                Icon(Icons.home),
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
+            icon: Icon(
+              Icons.people_outline,
+            ),
+            selectedIcon:
+                Icon(Icons.people),
             label: 'Friends',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+            icon: Icon(
+              Icons.person_outline,
+            ),
+            selectedIcon:
+                Icon(Icons.person),
             label: 'Profile',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
+            icon: Icon(
+              Icons.settings_outlined,
+            ),
+            selectedIcon:
+                Icon(Icons.settings),
             label: 'Settings',
           ),
         ],
       ),
+
       floatingActionButton:
           _currentIndex == 0
               ? FloatingActionButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Create post coming soon.',
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Icon(Icons.add),
+                  onPressed:
+                      _openCreatePost,
+                  tooltip:
+                      'Create Post',
+                  child: const Icon(
+                    Icons.add,
+                  ),
                 )
               : null,
     );
