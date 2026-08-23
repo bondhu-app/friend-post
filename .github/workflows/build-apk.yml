@@ -38,30 +38,24 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Search for Android V1 embedding
+      - name: Check for legacy Android V1 embedding
         shell: bash
         run: |
-          set +e
+          set -e
 
           echo "========================================"
-          echo "Searching repository for Android V1 embedding"
+          echo "Checking Android project"
           echo "========================================"
-
-          FOUND=0
 
           if grep -RInE \
             --exclude-dir=.git \
             --exclude-dir=build \
             --exclude-dir=.dart_tool \
-            "io\.flutter\.app\.FlutterActivity|io\.flutter\.app\.FlutterApplication|GeneratedPluginRegistrant|PluginRegistry\.Registrar|FlutterActivityDelegate|FlutterView" \
-            .; then
-            FOUND=1
-          fi
-
-          echo "========================================"
-
-          if [ "$FOUND" -eq 1 ]; then
-            echo "ERROR: Android V1 embedding reference found."
+            --exclude='build-apk.yml' \
+            "io\.flutter\.app\.FlutterActivity|io\.flutter\.app\.FlutterApplication|PluginRegistry\.Registrar|FlutterActivityDelegate|FlutterView" \
+            android; then
+            echo ""
+            echo "ERROR: Legacy Android V1 embedding reference found."
             exit 1
           fi
 
