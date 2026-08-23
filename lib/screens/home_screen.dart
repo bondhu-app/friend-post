@@ -2,490 +2,1035 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import 'home_screen.dart';
+import 'friends_screen.dart';
 
-class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
-  final _formKey = GlobalKey<FormState>();
-
-  final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-
-  bool _isLogin = true;
-  bool _isLoading = false;
-  bool _obscurePassword = true;
-
+class _HomeScreenState extends State<HomeScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
+  int _currentIndex = 0;
+  bool _isLoading = true;
+
+  String _userName = 'Friend';
+  String _userPhotoUrl = '';
+
   @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadUserData();
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) {
+  Future<void> _loadUserData() async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
       return;
     }
 
-    FocusScope.of(context).unfocus();
-
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
-      final email = _emailController.text.trim();
-      final password = _passwordController.text;
+      final doc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
-      if (_isLogin) {
-        await _login(
-          email: email,
-          password: password,
-        );
+      if (doc.exists) {
+        final data = doc.data();
+
+        if (mounted) {
+          setState(() {
+            _userName =
+                (data?['name'] ??
+                        user.displayName ??
+                        'Friend')
+                    .toString();
+
+            _userPhotoUrl =
+                (data?['photoUrl'] ?? '').toString();
+
+            _isLoading = false;
+          });
+        }
       } else {
-        final name = _nameController.text.trim();
-
-        await _register(
-          name: name,
-          email: email,
-          password: password,
-        );
+        if (mounted) {
+          setState(() {
+            _userName =
+                user.displayName ?? 'Friend';
+            _isLoading = false;
+          });
+        }
       }
-    } on FirebaseAuthException catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_getAuthErrorMessage(e)),
-        ),
-      );
-    } on FirebaseException catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.message ?? 'A Firebase error occurred.',
-          ),
-        ),
-      );
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Something went wrong: $e',
-          ),
-        ),
+      debugPrint(
+        'Load user data error: $e',
       );
-    } finally {
+
       if (mounted) {
         setState(() {
+          _userName =
+              user.displayName ?? 'Friend';
           _isLoading = false;
         });
       }
     }
   }
 
-  Future<void> _login({
-    required String email,
-    required String password,
-  }) async {
-    await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
+  Future<void> _logout() async {
+    final shouldLogout =
+        await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Logout'),
+          content: const Text(
+            'Are you sure you want to logout?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  false,
+                );
+              },
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  true,
+                );
+              },
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
     );
 
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Login successful!'),
-        duration: Duration(milliseconds: 700),
-      ),
-    );
-
-    await Future.delayed(
-      const Duration(milliseconds: 700),
-    );
-
-    if (!mounted) return;
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const HomeScreen(),
-      ),
-    );
-  }
-
-  Future<void> _register({
-    required String name,
-    required String email,
-    required String password,
-  }) async {
-    final credential =
-        await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-
-    final user = credential.user;
-
-    if (user == null) {
-      throw FirebaseException(
-        plugin: 'firebase_auth',
-        message: 'User account could not be created.',
-      );
-    }
-
-    await user.updateDisplayName(name);
-
-    await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .set({
-      'uid': user.uid,
-      'name': name,
-      'email': email,
-      'photoUrl': '',
-      'coverPhotoUrl': '',
-      'bio': '',
-      'phone': '',
-      'location': '',
-      'website': '',
-      'friendCount': 0,
-      'followingCount': 0,
-      'followerCount': 0,
-      'postCount': 0,
-      'isAdmin': false,
-      'isBlocked': false,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Account created successfully!',
-        ),
-        duration: Duration(milliseconds: 700),
-      ),
-    );
-
-    await Future.delayed(
-      const Duration(milliseconds: 700),
-    );
-
-    if (!mounted) return;
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const HomeScreen(),
-      ),
-    );
-  }
-
-  String _getAuthErrorMessage(
-    FirebaseAuthException e,
-  ) {
-    switch (e.code) {
-      case 'invalid-email':
-        return 'Please enter a valid email address.';
-
-      case 'user-not-found':
-        return 'No account found with this email.';
-
-      case 'wrong-password':
-        return 'Incorrect password.';
-
-      case 'invalid-credential':
-        return 'Incorrect email or password.';
-
-      case 'email-already-in-use':
-        return 'This email is already registered.';
-
-      case 'weak-password':
-        return 'Password must be at least 6 characters.';
-
-      case 'user-disabled':
-        return 'This account has been disabled.';
-
-      case 'too-many-requests':
-        return 'Too many attempts. Please try again later.';
-
-      case 'network-request-failed':
-        return 'Please check your internet connection.';
-
-      case 'operation-not-allowed':
-        return 'Email/password login is not enabled in Firebase.';
-
-      default:
-        return e.message ?? 'Authentication failed.';
-    }
-  }
-
-  String? _validateName(String? value) {
-    if (_isLogin) {
-      return null;
-    }
-
-    if (value == null || value.trim().isEmpty) {
-      return 'Please enter your name.';
-    }
-
-    if (value.trim().length < 2) {
-      return 'Name must be at least 2 characters.';
-    }
-
-    return null;
-  }
-
-  String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Please enter your email.';
-    }
-
-    final emailRegex = RegExp(
-      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-    );
-
-    if (!emailRegex.hasMatch(value.trim())) {
-      return 'Please enter a valid email.';
-    }
-
-    return null;
-  }
-
-  String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter your password.';
-    }
-
-    if (value.length < 6) {
-      return 'Password must be at least 6 characters.';
-    }
-
-    return null;
-  }
-
-  void _switchMode() {
-    if (_isLoading) {
+    if (shouldLogout != true) {
       return;
     }
 
-    setState(() {
-      _isLogin = !_isLogin;
-      _obscurePassword = true;
-    });
+    try {
+      await _auth.signOut();
 
-    _formKey.currentState?.reset();
+      if (!mounted) return;
 
-    _nameController.clear();
-    _emailController.clear();
-    _passwordController.clear();
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil(
+        '/',
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        SnackBar(
+          content: Text(
+            'Logout failed: $e',
+          ),
+        ),
+      );
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isLogin = _isLogin;
+  Widget _buildAvatar({
+    double radius = 24,
+  }) {
+    if (_userPhotoUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundImage:
+            NetworkImage(_userPhotoUrl),
+      );
+    }
 
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
+    return CircleAvatar(
+      radius: radius,
+      child: Icon(
+        Icons.person,
+        size: radius,
+      ),
+    );
+  }
+
+  Future<void> _openFriends() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            const FriendsScreen(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await _loadUserData();
+  }
+
+  Widget _buildHomePage() {
+    return RefreshIndicator(
+      onRefresh: _loadUserData,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Row(
+            children: [
+              _buildAvatar(radius: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Welcome back!',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _userName,
+                      style: const TextStyle(
+                        fontSize: 21,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Notifications coming soon.',
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          Card(
+            child: Padding(
+              padding:
+                  const EdgeInsets.all(18),
               child: Column(
                 crossAxisAlignment:
-                    CrossAxisAlignment.stretch,
+                    CrossAxisAlignment.start,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 90,
-                      height: 90,
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        borderRadius:
-                            BorderRadius.circular(26),
-                      ),
-                      child: const Icon(
-                        Icons.people_alt_rounded,
-                        color: Colors.white,
-                        size: 50,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 22),
-
                   const Text(
-                    'Friend Post',
-                    textAlign: TextAlign.center,
+                    'What\'s on your mind?',
                     style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                      fontWeight:
+                          FontWeight.w600,
                     ),
                   ),
-
-                  const SizedBox(height: 8),
-
-                  Text(
-                    isLogin
-                        ? 'Welcome back! Login to continue.'
-                        : 'Create your Friend Post account.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: Colors.grey,
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  if (!isLogin) ...[
-                    TextFormField(
-                      controller: _nameController,
-                      textInputAction:
-                          TextInputAction.next,
-                      textCapitalization:
-                          TextCapitalization.words,
-                      validator: _validateName,
-                      decoration: InputDecoration(
-                        labelText: 'Full name',
-                        hintText: 'Enter your name',
-                        prefixIcon: const Icon(
-                          Icons.person_outline,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(14),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType:
-                        TextInputType.emailAddress,
-                    textInputAction:
-                        TextInputAction.next,
-                    validator: _validateEmail,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      hintText: 'Enter your email',
-                      prefixIcon: const Icon(
-                        Icons.email_outlined,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    textInputAction:
-                        TextInputAction.done,
-                    validator: _validatePassword,
-                    onFieldSubmitted: (_) {
-                      if (!_isLoading) {
-                        _submit();
-                      }
-                    },
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      hintText: 'At least 6 characters',
-                      prefixIcon: const Icon(
-                        Icons.lock_outline,
-                      ),
-                      suffixIcon: IconButton(
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword =
-                                !_obscurePassword;
-                          });
-                        },
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                        ),
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed:
-                          _isLoading ? null : _submit,
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child:
-                                  CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                              ),
-                            )
-                          : Text(
-                              isLogin
-                                  ? 'Login'
-                                  : 'Create Account',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight:
-                                    FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                  ),
-
                   const SizedBox(height: 14),
-
-                  TextButton(
-                    onPressed:
-                        _isLoading ? null : _switchMode,
-                    child: Text(
-                      isLogin
-                          ? "Don't have an account? Create one"
-                          : 'Already have an account? Login',
-                    ),
+                  Row(
+                    children: [
+                      _buildAvatar(
+                        radius: 22,
+                      ),
+                      const SizedBox(
+                        width: 12,
+                      ),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            ScaffoldMessenger
+                                    .of(
+                              context,
+                            ).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Create post coming soon.',
+                                ),
+                              ),
+                            );
+                          },
+                          child:
+                              const Align(
+                            alignment:
+                                Alignment
+                                    .centerLeft,
+                            child: Text(
+                              'Write something...',
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child:
+                            TextButton.icon(
+                          onPressed: () {
+                            ScaffoldMessenger
+                                    .of(
+                              context,
+                            ).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Photo post coming soon.',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons
+                                .photo_outlined,
+                          ),
+                          label:
+                              const Text(
+                            'Photo',
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child:
+                            TextButton.icon(
+                          onPressed: () {
+                            ScaffoldMessenger
+                                    .of(
+                              context,
+                            ).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Feeling feature coming soon.',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(
+                            Icons
+                                .emoji_emotions_outlined,
+                          ),
+                          label:
+                              const Text(
+                            'Feeling',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
+
+          const SizedBox(height: 18),
+
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Recent Posts',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight:
+                        FontWeight.bold,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _openFriends,
+                icon: const Icon(
+                  Icons.people_outline,
+                ),
+                label:
+                    const Text('Friends'),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          StreamBuilder<
+              QuerySnapshot<
+                  Map<String, dynamic>>>(
+            stream: _firestore
+                .collection('posts')
+                .orderBy(
+                  'createdAt',
+                  descending: true,
+                )
+                .limit(20)
+                .snapshots(),
+            builder:
+                (context, snapshot) {
+              if (snapshot.hasError) {
+                return Card(
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.all(
+                      20,
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons
+                              .article_outlined,
+                          size: 45,
+                        ),
+                        const SizedBox(
+                          height: 10,
+                        ),
+                        const Text(
+                          'No posts available yet.',
+                          textAlign:
+                              TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              if (snapshot
+                      .connectionState ==
+                  ConnectionState.waiting) {
+                return const Center(
+                  child: Padding(
+                    padding:
+                        EdgeInsets.all(30),
+                    child:
+                        CircularProgressIndicator(),
+                  ),
+                );
+              }
+
+              final posts =
+                  snapshot.data?.docs ??
+                      [];
+
+              if (posts.isEmpty) {
+                return Card(
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.all(
+                      25,
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons
+                              .dynamic_feed_outlined,
+                          size: 50,
+                        ),
+                        const SizedBox(
+                          height: 12,
+                        ),
+                        const Text(
+                          'No posts yet.',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight:
+                                FontWeight
+                                    .w600,
+                          ),
+                        ),
+                        const SizedBox(
+                          height: 6,
+                        ),
+                        const Text(
+                          'Be the first person to create a post.',
+                          textAlign:
+                              TextAlign.center,
+                          style: TextStyle(
+                            color:
+                                Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                children:
+                    posts.map((post) {
+                  return _buildPostCard(
+                    post,
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostCard(
+    QueryDocumentSnapshot<
+            Map<String, dynamic>>
+        post,
+  ) {
+    final data = post.data();
+
+    final name = (data['userName'] ??
+            data['name'] ??
+            'Friend')
+        .toString();
+
+    final text =
+        (data['text'] ??
+                data['content'] ??
+                '')
+            .toString();
+
+    final photoUrl =
+        (data['photoUrl'] ?? '')
+            .toString();
+
+    final imageUrl =
+        (data['imageUrl'] ?? '')
+            .toString();
+
+    final likes =
+        (data['likeCount'] ??
+            data['likes'] ??
+            0);
+
+    return Card(
+      margin:
+          const EdgeInsets.only(
+        bottom: 14,
+      ),
+      child: Padding(
+        padding:
+            const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (photoUrl.isNotEmpty)
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundImage:
+                        NetworkImage(
+                      photoUrl,
+                    ),
+                  )
+                else
+                  const CircleAvatar(
+                    radius: 22,
+                    child: Icon(
+                      Icons.person,
+                    ),
+                  ),
+                const SizedBox(
+                  width: 12,
+                ),
+                Expanded(
+                  child: Text(
+                    name,
+                    style:
+                        const TextStyle(
+                      fontWeight:
+                          FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons.more_horiz,
+                  ),
+                ),
+              ],
+            ),
+
+            if (text.isNotEmpty) ...[
+              const SizedBox(
+                height: 14,
+              ),
+              Text(
+                text,
+                style:
+                    const TextStyle(
+                  fontSize: 16,
+                ),
+              ),
+            ],
+
+            if (imageUrl.isNotEmpty) ...[
+              const SizedBox(
+                height: 14,
+              ),
+              ClipRRect(
+                borderRadius:
+                    BorderRadius.circular(
+                  12,
+                ),
+                child: Image.network(
+                  imageUrl,
+                  width:
+                      double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (
+                    context,
+                    error,
+                    stackTrace,
+                  ) {
+                    return const SizedBox(
+                      height: 180,
+                      child: Center(
+                        child: Icon(
+                          Icons
+                              .broken_image_outlined,
+                          size: 50,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+
+            const SizedBox(
+              height: 12,
+            ),
+
+            Row(
+              children: [
+                Text(
+                  '$likes likes',
+                  style:
+                      const TextStyle(
+                    color: Colors.grey,
+                  ),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons
+                        .favorite_border,
+                  ),
+                  label:
+                      const Text('Like'),
+                ),
+                TextButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons
+                        .comment_outlined,
+                  ),
+                  label:
+                      const Text('Comment'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildProfilePage() {
+    return SingleChildScrollView(
+      padding:
+          const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+
+          _buildAvatar(radius: 55),
+
+          const SizedBox(height: 16),
+
+          Text(
+            _userName,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          Text(
+            _auth.currentUser?.email ??
+                '',
+            style:
+                const TextStyle(
+              color: Colors.grey,
+            ),
+          ),
+
+          const SizedBox(height: 25),
+
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.person_outline,
+                  ),
+                  title: const Text(
+                    'My Profile',
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
+                  onTap: () {},
+                ),
+                const Divider(
+                  height: 1,
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons
+                        .edit_outlined,
+                  ),
+                  title: const Text(
+                    'Edit Profile',
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
+                  onTap: () {},
+                ),
+                const Divider(
+                  height: 1,
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons
+                        .settings_outlined,
+                  ),
+                  title: const Text(
+                    'Settings',
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
+                  onTap: () {
+                    setState(() {
+                      _currentIndex =
+                          3;
+                    });
+                  },
+                ),
+                const Divider(
+                  height: 1,
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.logout,
+                  ),
+                  title: const Text(
+                    'Logout',
+                  ),
+                  onTap: _logout,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsPage() {
+    return ListView(
+      padding:
+          const EdgeInsets.all(16),
+      children: [
+        const Text(
+          'Settings',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight:
+                FontWeight.bold,
+          ),
+        ),
+
+        const SizedBox(
+          height: 20,
+        ),
+
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(
+                  Icons
+                      .notifications_outlined,
+                ),
+                title: const Text(
+                  'Notifications',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {},
+              ),
+              const Divider(
+                height: 1,
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.lock_outline,
+                ),
+                title: const Text(
+                  'Privacy',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {},
+              ),
+              const Divider(
+                height: 1,
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons
+                      .security_outlined,
+                ),
+                title: const Text(
+                  'Security',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {},
+              ),
+              const Divider(
+                height: 1,
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.info_outline,
+                ),
+                title: const Text(
+                  'About Friend Post',
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                ),
+                onTap: () {
+                  showAboutDialog(
+                    context: context,
+                    applicationName:
+                        'Friend Post',
+                    applicationVersion:
+                        '1.0.0',
+                    applicationLegalese:
+                        'A social media app for connecting with friends.',
+                  );
+                },
+              ),
+              const Divider(
+                height: 1,
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.logout,
+                ),
+                title: const Text(
+                  'Logout',
+                ),
+                onTap: _logout,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getTitle() {
+    switch (_currentIndex) {
+      case 0:
+        return 'Friend Post';
+      case 1:
+        return 'Friends';
+      case 2:
+        return 'My Profile';
+      case 3:
+        return 'Settings';
+      default:
+        return 'Friend Post';
+    }
+  }
+
+  Widget _getCurrentPage() {
+    switch (_currentIndex) {
+      case 0:
+        return _buildHomePage();
+
+      case 1:
+        return const FriendsScreen();
+
+      case 2:
+        return _buildProfilePage();
+
+      case 3:
+        return _buildSettingsPage();
+
+      default:
+        return _buildHomePage();
+    }
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child:
+              CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _getTitle(),
+          style:
+              const TextStyle(
+            fontWeight:
+                FontWeight.bold,
+          ),
+        ),
+        actions: [
+          if (_currentIndex == 0)
+            IconButton(
+              onPressed:
+                  _loadUserData,
+              icon: const Icon(
+                Icons.refresh,
+              ),
+            ),
+          if (_currentIndex == 1)
+            IconButton(
+              onPressed: () {
+                Navigator.of(context)
+                    .push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const FriendsScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(
+                Icons.person_add_alt_1,
+              ),
+            ),
+        ],
+      ),
+
+      body: _getCurrentPage(),
+
+      bottomNavigationBar:
+          NavigationBar(
+        selectedIndex:
+            _currentIndex,
+        onDestinationSelected:
+            (index) {
+          setState(() {
+            _currentIndex =
+                index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(
+              Icons.home_outlined,
+            ),
+            selectedIcon:
+                Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(
+              Icons.people_outline,
+            ),
+            selectedIcon:
+                Icon(Icons.people),
+            label: 'Friends',
+          ),
+          NavigationDestination(
+            icon: Icon(
+              Icons.person_outline,
+            ),
+            selectedIcon:
+                Icon(Icons.person),
+            label: 'Profile',
+          ),
+          NavigationDestination(
+            icon: Icon(
+              Icons.settings_outlined,
+            ),
+            selectedIcon:
+                Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+      ),
+
+      floatingActionButton:
+          _currentIndex == 0
+              ? FloatingActionButton(
+                  onPressed: () {
+                    ScaffoldMessenger
+                            .of(
+                      context,
+                    ).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Create post coming soon.',
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Icon(
+                    Icons.add,
+                  ),
+                )
+              : null,
     );
   }
 }
