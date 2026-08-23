@@ -11,21 +11,20 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
   bool _isLoading = true;
+  bool _isSaving = false;
 
-  String _name = '';
+  String _name = 'Friend';
   String _email = '';
   String _bio = '';
+  String _phone = '';
   String _location = '';
   String _website = '';
   String _photoUrl = '';
-
-  int _postCount = 0;
-  int _friendCount = 0;
-  int _followerCount = 0;
-  int _followingCount = 0;
+  String _coverPhotoUrl = '';
 
   @override
   void initState() {
@@ -46,111 +45,172 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     try {
-      final document = await _firestore
+      final doc = await _firestore
           .collection('users')
           .doc(user.uid)
           .get();
 
-      final data = document.data();
+      final data = doc.data();
 
-      if (data != null) {
-        _name = (data['name'] ?? user.displayName ?? '').toString();
-        _email = (data['email'] ?? user.email ?? '').toString();
-        _bio = (data['bio'] ?? '').toString();
-        _location = (data['location'] ?? '').toString();
-        _website = (data['website'] ?? '').toString();
-        _photoUrl = (data['photoUrl'] ?? '').toString();
+      if (mounted) {
+        setState(() {
+          _name =
+              (data?['name'] ??
+                      user.displayName ??
+                      'Friend')
+                  .toString();
 
-        _postCount = _toInt(data['postCount']);
-        _friendCount = _toInt(data['friendCount']);
-        _followerCount = _toInt(data['followerCount']);
-        _followingCount = _toInt(data['followingCount']);
-      } else {
-        _name = user.displayName ?? '';
-        _email = user.email ?? '';
+          _email =
+              (data?['email'] ??
+                      user.email ??
+                      '')
+                  .toString();
+
+          _bio =
+              (data?['bio'] ?? '').toString();
+
+          _phone =
+              (data?['phone'] ?? '').toString();
+
+          _location =
+              (data?['location'] ?? '')
+                  .toString();
+
+          _website =
+              (data?['website'] ?? '')
+                  .toString();
+
+          _photoUrl =
+              (data?['photoUrl'] ?? '')
+                  .toString();
+
+          _coverPhotoUrl =
+              (data?['coverPhotoUrl'] ?? '')
+                  .toString();
+
+          _isLoading = false;
+        });
       }
     } catch (e) {
+      debugPrint(
+        'Profile loading error: $e',
+      );
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        setState(() {
+          _isLoading = false;
+        });
+
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           SnackBar(
-            content: Text('Could not load profile: $e'),
+            content: Text(
+              'Could not load profile: $e',
+            ),
           ),
         );
       }
     }
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  int _toInt(dynamic value) {
-    if (value is int) {
-      return value;
-    }
-
-    if (value is num) {
-      return value.toInt();
-    }
-
-    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Future<void> _editProfile() async {
-    final user = _auth.currentUser;
+    final nameController =
+        TextEditingController(text: _name);
 
-    if (user == null) {
-      return;
-    }
+    final bioController =
+        TextEditingController(text: _bio);
 
-    final nameController = TextEditingController(text: _name);
-    final bioController = TextEditingController(text: _bio);
-    final locationController = TextEditingController(text: _location);
-    final websiteController = TextEditingController(text: _website);
+    final phoneController =
+        TextEditingController(text: _phone);
 
-    final result = await showDialog<bool>(
+    final locationController =
+        TextEditingController(text: _location);
+
+    final websiteController =
+        TextEditingController(text: _website);
+
+    final result =
+        await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Edit Profile'),
+          title: const Text(
+            'Edit Profile',
+          ),
           content: SingleChildScrollView(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize:
+                  MainAxisSize.min,
               children: [
                 TextField(
                   controller: nameController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
+                  textCapitalization:
+                      TextCapitalization.words,
+                  decoration:
+                      const InputDecoration(
                     labelText: 'Name',
-                    prefixIcon: Icon(Icons.person_outline),
+                    prefixIcon: Icon(
+                      Icons.person_outline,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
                 TextField(
                   controller: bioController,
                   maxLines: 3,
-                  decoration: const InputDecoration(
+                  decoration:
+                      const InputDecoration(
                     labelText: 'Bio',
-                    prefixIcon: Icon(Icons.info_outline),
+                    prefixIcon: Icon(
+                      Icons.edit_note,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
                 TextField(
-                  controller: locationController,
-                  decoration: const InputDecoration(
+                  controller: phoneController,
+                  keyboardType:
+                      TextInputType.phone,
+                  decoration:
+                      const InputDecoration(
+                    labelText: 'Phone',
+                    prefixIcon: Icon(
+                      Icons.phone_outlined,
+                    ),
+                  ),
+                ),
+                const SizedBox(
+                  height: 12,
+                ),
+                TextField(
+                  controller:
+                      locationController,
+                  decoration:
+                      const InputDecoration(
                     labelText: 'Location',
-                    prefixIcon: Icon(Icons.location_on_outlined),
+                    prefixIcon: Icon(
+                      Icons.location_on_outlined,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(
+                  height: 12,
+                ),
                 TextField(
-                  controller: websiteController,
-                  keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
+                  controller:
+                      websiteController,
+                  keyboardType:
+                      TextInputType.url,
+                  decoration:
+                      const InputDecoration(
                     labelText: 'Website',
-                    prefixIcon: Icon(Icons.language_outlined),
+                    prefixIcon: Icon(
+                      Icons.language,
+                    ),
                   ),
                 ),
               ],
@@ -159,318 +219,433 @@ class _ProfileScreenState extends State<ProfileScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop(false);
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
               },
-              child: const Text('Cancel'),
+              child:
+                  const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
+              onPressed: () async {
+                final name =
+                    nameController.text
+                        .trim();
+
+                if (name.isEmpty) {
+                  ScaffoldMessenger.of(
+                    dialogContext,
+                  ).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Name cannot be empty.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+
+                final user =
+                    _auth.currentUser;
+
+                if (user == null) {
+                  return;
+                }
+
+                setState(() {
+                  _isSaving = true;
+                });
+
+                try {
+                  await _firestore
+                      .collection('users')
+                      .doc(user.uid)
+                      .set(
+                    {
+                      'name': name,
+                      'email':
+                          user.email ?? _email,
+                      'bio':
+                          bioController.text
+                              .trim(),
+                      'phone':
+                          phoneController.text
+                              .trim(),
+                      'location':
+                          locationController
+                              .text
+                              .trim(),
+                      'website':
+                          websiteController
+                              .text
+                              .trim(),
+                      'updatedAt':
+                          FieldValue
+                              .serverTimestamp(),
+                    },
+                    SetOptions(
+                      merge: true,
+                    ),
+                  );
+
+                  await user
+                      .updateDisplayName(
+                    name,
+                  );
+
+                  if (!mounted) {
+                    return;
+                  }
+
+                  setState(() {
+                    _name = name;
+                    _bio =
+                        bioController.text
+                            .trim();
+                    _phone =
+                        phoneController.text
+                            .trim();
+                    _location =
+                        locationController
+                            .text
+                            .trim();
+                    _website =
+                        websiteController
+                            .text
+                            .trim();
+                  });
+
+                  Navigator.pop(
+                    dialogContext,
+                    true,
+                  );
+
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Profile updated successfully.',
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+
+                  setState(() {
+                    _isSaving = false;
+                  });
+
+                  ScaffoldMessenger.of(
+                    dialogContext,
+                  ).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Could not update profile: $e',
+                      ),
+                    ),
+                  );
+                } finally {
+                  if (mounted) {
+                    setState(() {
+                      _isSaving = false;
+                    });
+                  }
+                }
               },
-              child: const Text('Save'),
+              child: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child:
+                          CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text('Save'),
             ),
           ],
         );
       },
     );
 
-    if (result != true) {
-      nameController.dispose();
-      bioController.dispose();
-      locationController.dispose();
-      websiteController.dispose();
-      return;
-    }
-
-    final newName = nameController.text.trim();
-    final newBio = bioController.text.trim();
-    final newLocation = locationController.text.trim();
-    final newWebsite = websiteController.text.trim();
-
     nameController.dispose();
     bioController.dispose();
+    phoneController.dispose();
     locationController.dispose();
     websiteController.dispose();
 
-    if (newName.isEmpty) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Name cannot be empty.'),
-        ),
-      );
-
-      return;
-    }
-
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      await user.updateDisplayName(newName);
-
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .set(
-        {
-          'name': newName,
-          'bio': newBio,
-          'location': newLocation,
-          'website': newWebsite,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-
-      _name = newName;
-      _bio = newBio;
-      _location = newLocation;
-      _website = newWebsite;
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile updated successfully!'),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not update profile: $e'),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+    if (result == true && mounted) {
+      await _loadProfile();
     }
   }
 
-  Widget _buildAvatar() {
+  Future<void> _logout() async {
+    final confirm =
+        await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text(
+            'Logout',
+          ),
+          content: const Text(
+            'Are you sure you want to logout?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  false,
+                );
+              },
+              child:
+                  const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                  true,
+                );
+              },
+              child:
+                  const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    await _auth.signOut();
+
+    if (!mounted) return;
+
+    Navigator.of(context)
+        .pushNamedAndRemoveUntil(
+      '/',
+      (route) => false,
+    );
+  }
+
+  Widget _buildProfileAvatar() {
     if (_photoUrl.isNotEmpty) {
       return CircleAvatar(
         radius: 55,
-        backgroundImage: NetworkImage(_photoUrl),
+        backgroundImage:
+            NetworkImage(_photoUrl),
       );
     }
 
     return const CircleAvatar(
       radius: 55,
       child: Icon(
-        Icons.person_rounded,
+        Icons.person,
         size: 60,
       ),
     );
   }
 
-  Widget _buildStat(String value, String label) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.grey,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(
-    IconData icon,
-    String text,
-  ) {
-    if (text.isEmpty) {
+  Widget _buildInfoTile({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
+    if (value.trim().isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 21,
-            color: Colors.grey,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 15),
-            ),
-          ),
-        ],
-      ),
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(value),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child:
+              CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'My Profile',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
         actions: [
           IconButton(
-            tooltip: 'Edit Profile',
-            onPressed: _isLoading ? null : _editProfile,
-            icon: const Icon(Icons.edit_rounded),
+            onPressed: _loadProfile,
+            icon:
+                const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadProfile,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
+      body: RefreshIndicator(
+        onRefresh: _loadProfile,
+        child: ListView(
+          padding:
+              const EdgeInsets.all(16),
+          children: [
+            if (_coverPhotoUrl.isNotEmpty)
+              ClipRRect(
+                borderRadius:
+                    BorderRadius.circular(
+                  16,
+                ),
+                child: Image.network(
+                  _coverPhotoUrl,
+                  height: 150,
+                  width:
+                      double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder:
+                      (
+                    context,
+                    error,
+                    stackTrace,
+                  ) {
+                    return const SizedBox(
+                      height: 150,
+                    );
+                  },
+                ),
+              ),
+
+            const SizedBox(
+              height: 20,
+            ),
+
+            Center(
+              child:
+                  _buildProfileAvatar(),
+            ),
+
+            const SizedBox(
+              height: 14,
+            ),
+
+            Text(
+              _name,
+              textAlign:
+                  TextAlign.center,
+              style:
+                  const TextStyle(
+                fontSize: 26,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(
+              height: 5,
+            ),
+
+            Text(
+              _email,
+              textAlign:
+                  TextAlign.center,
+              style:
+                  const TextStyle(
+                color: Colors.grey,
+              ),
+            ),
+
+            if (_bio.isNotEmpty) ...[
+              const SizedBox(
+                height: 14,
+              ),
+              Text(
+                _bio,
+                textAlign:
+                    TextAlign.center,
+                style:
+                    const TextStyle(
+                  fontSize: 15,
+                ),
+              ),
+            ],
+
+            const SizedBox(
+              height: 20,
+            ),
+
+            SizedBox(
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: _editProfile,
+                icon: const Icon(
+                  Icons.edit_outlined,
+                ),
+                label: const Text(
+                  'Edit Profile',
+                ),
+              ),
+            ),
+
+            const SizedBox(
+              height: 20,
+            ),
+
+            Card(
+              child: Column(
                 children: [
-                  const SizedBox(height: 10),
-
-                  Center(
-                    child: _buildAvatar(),
+                  _buildInfoTile(
+                    icon: Icons.phone_outlined,
+                    title: 'Phone',
+                    value: _phone,
                   ),
-
-                  const SizedBox(height: 16),
-
-                  Text(
-                    _name.isEmpty ? 'Friend Post User' : _name,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  _buildInfoTile(
+                    icon: Icons
+                        .location_on_outlined,
+                    title: 'Location',
+                    value: _location,
                   ),
-
-                  const SizedBox(height: 6),
-
-                  Text(
-                    _email,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.grey,
-                      fontSize: 14,
-                    ),
+                  _buildInfoTile(
+                    icon: Icons.language,
+                    title: 'Website',
+                    value: _website,
                   ),
-
-                  const SizedBox(height: 22),
-
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 18,
-                        horizontal: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          _buildStat(
-                            _postCount.toString(),
-                            'Posts',
-                          ),
-                          _buildStat(
-                            _friendCount.toString(),
-                            'Friends',
-                          ),
-                          _buildStat(
-                            _followerCount.toString(),
-                            'Followers',
-                          ),
-                          _buildStat(
-                            _followingCount.toString(),
-                            'Following',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'About',
-                            style: TextStyle(
-                              fontSize: 19,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-
-                          _buildInfoRow(
-                            Icons.info_outline,
-                            _bio,
-                          ),
-
-                          _buildInfoRow(
-                            Icons.location_on_outlined,
-                            _location,
-                          ),
-
-                          _buildInfoRow(
-                            Icons.language_outlined,
-                            _website,
-                          ),
-
-                          if (_bio.isEmpty &&
-                              _location.isEmpty &&
-                              _website.isEmpty)
-                            const Text(
-                              'No profile information added yet.',
-                              style: TextStyle(
-                                color: Colors.grey,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  FilledButton.icon(
-                    onPressed: _editProfile,
-                    icon: const Icon(Icons.edit_rounded),
-                    label: const Text('Edit Profile'),
-                  ),
-
-                  const SizedBox(height: 30),
                 ],
               ),
             ),
+
+            const SizedBox(
+              height: 16,
+            ),
+
+            Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.logout,
+                ),
+                title:
+                    const Text('Logout'),
+                onTap: _logout,
+              ),
+            ),
+
+            const SizedBox(
+              height: 30,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
