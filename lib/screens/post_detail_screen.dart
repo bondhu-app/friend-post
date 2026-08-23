@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/comment_section.dart';
+
 class PostDetailScreen extends StatefulWidget {
   final String postId;
 
@@ -23,18 +25,8 @@ class _PostDetailScreenState
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
-  final TextEditingController _commentController =
-      TextEditingController();
-
-  bool _isCommenting = false;
   bool _isLiking = false;
   bool _isDeleting = false;
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    super.dispose();
-  }
 
   DocumentReference<Map<String, dynamic>>
       get _postReference {
@@ -82,25 +74,26 @@ class _PostDetailScreenState
         return;
       }
 
-      final currentData =
+      final data =
           postDocument.data() ?? {};
 
-      final currentLikes =
-          _toInt(
-        currentData['likeCount'] ??
-            currentData['likes'],
+      final currentLikes = _toInt(
+        data['likeCount'] ??
+            data['likes'],
       );
 
       if (likeDocument.exists) {
         await likeReference.delete();
 
         await _postReference.update({
-          'likeCount': currentLikes > 0
-              ? currentLikes - 1
-              : 0,
-          'likes': currentLikes > 0
-              ? currentLikes - 1
-              : 0,
+          'likeCount':
+              currentLikes > 0
+                  ? currentLikes - 1
+                  : 0,
+          'likes':
+              currentLikes > 0
+                  ? currentLikes - 1
+                  : 0,
           'updatedAt':
               FieldValue.serverTimestamp(),
         });
@@ -137,143 +130,6 @@ class _PostDetailScreenState
       if (mounted) {
         setState(() {
           _isLiking = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _addComment() async {
-    final user = _auth.currentUser;
-
-    if (user == null) {
-      _showMessage(
-        'Please login first.',
-      );
-      return;
-    }
-
-    final text =
-        _commentController.text.trim();
-
-    if (text.isEmpty) {
-      return;
-    }
-
-    if (_isCommenting) {
-      return;
-    }
-
-    setState(() {
-      _isCommenting = true;
-    });
-
-    try {
-      String userName =
-          user.displayName ?? 'Friend';
-
-      String photoUrl =
-          user.photoURL ?? '';
-
-      try {
-        final userDocument =
-            await _firestore
-                .collection('users')
-                .doc(user.uid)
-                .get();
-
-        final userData =
-            userDocument.data();
-
-        if (userData != null) {
-          final savedName =
-              userData['name'];
-
-          final savedPhoto =
-              userData['photoUrl'];
-
-          if (savedName != null &&
-              savedName
-                  .toString()
-                  .trim()
-                  .isNotEmpty) {
-            userName =
-                savedName.toString();
-          }
-
-          if (savedPhoto != null &&
-              savedPhoto
-                  .toString()
-                  .trim()
-                  .isNotEmpty) {
-            photoUrl =
-                savedPhoto.toString();
-          }
-        }
-      } catch (e) {
-        debugPrint(
-          'Could not load commenter data: $e',
-        );
-      }
-
-      final commentReference =
-          _postReference
-              .collection('comments')
-              .doc();
-
-      await commentReference.set({
-        'commentId':
-            commentReference.id,
-        'postId':
-            widget.postId,
-        'uid': user.uid,
-        'userId': user.uid,
-        'userName': userName,
-        'name': userName,
-        'photoUrl': photoUrl,
-        'text': text,
-        'content': text,
-        'createdAt':
-            FieldValue.serverTimestamp(),
-        'updatedAt':
-            FieldValue.serverTimestamp(),
-      });
-
-      final postDocument =
-          await _postReference.get();
-
-      final postData =
-          postDocument.data() ?? {};
-
-      final currentComments =
-          _toInt(
-        postData['commentCount'],
-      );
-
-      await _postReference.update({
-        'commentCount':
-            currentComments + 1,
-        'updatedAt':
-            FieldValue.serverTimestamp(),
-      });
-
-      _commentController.clear();
-    } on FirebaseException catch (e) {
-      _showMessage(
-        e.message ??
-            'Could not add comment.',
-      );
-    } catch (e) {
-      debugPrint(
-        'Comment error: $e',
-      );
-
-      _showMessage(
-        'Could not add comment.',
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isCommenting = false;
         });
       }
     }
@@ -349,24 +205,24 @@ class _PostDetailScreenState
     });
 
     try {
-      final commentsSnapshot =
+      final comments =
           await _postReference
               .collection('comments')
               .get();
 
-      for (final document
-          in commentsSnapshot.docs) {
-        await document.reference.delete();
+      for (final comment
+          in comments.docs) {
+        await comment.reference.delete();
       }
 
-      final likesSnapshot =
+      final likes =
           await _postReference
               .collection('likes')
               .get();
 
-      for (final document
-          in likesSnapshot.docs) {
-        await document.reference.delete();
+      for (final like
+          in likes.docs) {
+        await like.reference.delete();
       }
 
       await _postReference.delete();
@@ -383,11 +239,13 @@ class _PostDetailScreenState
         });
       } catch (e) {
         debugPrint(
-          'Could not update post count: $e',
+          'Post count update error: $e',
         );
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       Navigator.of(context).pop(true);
     } on FirebaseException catch (e) {
@@ -437,11 +295,8 @@ class _PostDetailScreenState
     final date =
         value.toDate();
 
-    final now =
-        DateTime.now();
-
     final difference =
-        now.difference(date);
+        DateTime.now().difference(date);
 
     if (difference.inMinutes < 1) {
       return 'Just now';
@@ -462,202 +317,37 @@ class _PostDetailScreenState
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  void _showMessage(
-    String message,
-  ) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
-    );
-  }
-
-  Widget _userAvatar(
+  Widget _avatar(
     String photoUrl,
   ) {
     if (photoUrl.trim().isNotEmpty) {
       return CircleAvatar(
-        radius: 23,
+        radius: 24,
         backgroundImage:
             NetworkImage(photoUrl),
       );
     }
 
     return const CircleAvatar(
-      radius: 23,
+      radius: 24,
       child: Icon(
         Icons.person,
       ),
     );
   }
 
-  Widget _buildComments() {
-    return StreamBuilder<
-        QuerySnapshot<
-            Map<String, dynamic>>>(
-      stream: _postReference
-          .collection('comments')
-          .orderBy(
-            'createdAt',
-            descending: false,
-          )
-          .snapshots(),
-      builder:
-          (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Padding(
-            padding:
-                EdgeInsets.all(20),
-            child: Text(
-              'Could not load comments.',
-            ),
-          );
-        }
+  void _showMessage(
+    String message,
+  ) {
+    if (!mounted) {
+      return;
+    }
 
-        if (snapshot.connectionState ==
-            ConnectionState.waiting) {
-          return const Padding(
-            padding:
-                EdgeInsets.all(20),
-            child: Center(
-              child:
-                  CircularProgressIndicator(),
-            ),
-          );
-        }
-
-        final comments =
-            snapshot.data?.docs ?? [];
-
-        if (comments.isEmpty) {
-          return const Padding(
-            padding:
-                EdgeInsets.symmetric(
-              vertical: 24,
-            ),
-            child: Center(
-              child: Text(
-                'No comments yet.',
-                style: TextStyle(
-                  color: Colors.grey,
-                ),
-              ),
-            ),
-          );
-        }
-
-        return Column(
-          children: comments
-              .map(
-                (comment) {
-                  final data =
-                      comment.data();
-
-                  final name =
-                      (data['userName'] ??
-                              data['name'] ??
-                              'Friend')
-                          .toString();
-
-                  final text =
-                      (data['text'] ??
-                              data['content'] ??
-                              '')
-                          .toString();
-
-                  final photoUrl =
-                      (data['photoUrl'] ??
-                              '')
-                          .toString();
-
-                  final createdAt =
-                      data['createdAt'];
-
-                  return Padding(
-                    padding:
-                        const EdgeInsets
-                            .only(
-                      bottom: 14,
-                    ),
-                    child: Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
-                      children: [
-                        _userAvatar(
-                          photoUrl,
-                        ),
-                        const SizedBox(
-                          width: 10,
-                        ),
-                        Expanded(
-                          child: Container(
-                            padding:
-                                const EdgeInsets
-                                    .all(
-                              12,
-                            ),
-                            decoration:
-                                BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              )
-                                  .colorScheme
-                                  .surfaceContainerHighest,
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                14,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
-                              children: [
-                                Text(
-                                  name,
-                                  style:
-                                      const TextStyle(
-                                    fontWeight:
-                                        FontWeight
-                                            .bold,
-                                  ),
-                                ),
-                                const SizedBox(
-                                  height: 4,
-                                ),
-                                Text(text),
-                                const SizedBox(
-                                  height: 5,
-                                ),
-                                Text(
-                                  _formatDate(
-                                    createdAt,
-                                  ),
-                                  style:
-                                      const TextStyle(
-                                    fontSize:
-                                        12,
-                                    color:
-                                        Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              )
-              .toList(),
-        );
-      },
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
     );
   }
 
@@ -785,7 +475,7 @@ class _PostDetailScreenState
                     children: [
                       Row(
                         children: [
-                          _userAvatar(
+                          _avatar(
                             photoUrl,
                           ),
                           const SizedBox(
@@ -817,10 +507,10 @@ class _PostDetailScreenState
                                   ),
                                   style:
                                       const TextStyle(
-                                    color:
-                                        Colors.grey,
                                     fontSize:
                                         13,
+                                    color:
+                                        Colors.grey,
                                   ),
                                 ),
                               ],
@@ -922,14 +612,13 @@ class _PostDetailScreenState
                       ],
 
                       const SizedBox(
-                        height: 20,
+                        height: 18,
                       ),
 
                       Row(
                         children: [
                           const Icon(
-                            Icons
-                                .favorite,
+                            Icons.favorite,
                             size: 20,
                           ),
                           const SizedBox(
@@ -956,7 +645,7 @@ class _PostDetailScreenState
                       ),
 
                       const Divider(
-                        height: 28,
+                        height: 30,
                       ),
 
                       StreamBuilder<
@@ -984,34 +673,32 @@ class _PostDetailScreenState
                                   ?.exists ??
                                   false;
 
-                          return Row(
-                            children: [
-                              Expanded(
-                                child:
-                                    OutlinedButton.icon(
-                                  onPressed:
-                                      _isLiking
-                                          ? null
-                                          : () {
-                                              _toggleLike(
-                                                postData,
-                                              );
-                                            },
-                                  icon: Icon(
-                                    liked
-                                        ? Icons
-                                            .favorite
-                                        : Icons
-                                            .favorite_border,
-                                  ),
-                                  label: Text(
-                                    liked
-                                        ? 'Liked'
-                                        : 'Like',
-                                  ),
-                                ),
+                          return SizedBox(
+                            width:
+                                double.infinity,
+                            child:
+                                OutlinedButton.icon(
+                              onPressed:
+                                  _isLiking
+                                      ? null
+                                      : () {
+                                          _toggleLike(
+                                            postData,
+                                          );
+                                        },
+                              icon: Icon(
+                                liked
+                                    ? Icons
+                                        .favorite
+                                    : Icons
+                                        .favorite_border,
                               ),
-                            ],
+                              label: Text(
+                                liked
+                                    ? 'Liked'
+                                    : 'Like',
+                              ),
+                            ),
                           );
                         },
                       ),
@@ -1020,117 +707,11 @@ class _PostDetailScreenState
                         height: 24,
                       ),
 
-                      const Text(
-                        'Comments',
-                        style:
-                            TextStyle(
-                          fontSize: 20,
-                          fontWeight:
-                              FontWeight
-                                  .bold,
-                        ),
+                      CommentSection(
+                        postId:
+                            widget.postId,
                       ),
-
-                      const SizedBox(
-                        height: 14,
-                      ),
-
-                      _buildComments(),
                     ],
-                  ),
-                ),
-              ),
-
-              Container(
-                decoration:
-                    BoxDecoration(
-                  border: Border(
-                    top: BorderSide(
-                      color:
-                          Theme.of(
-                        context,
-                      )
-                              .dividerColor,
-                    ),
-                  ),
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets
-                            .fromLTRB(
-                      12,
-                      8,
-                      8,
-                      8,
-                    ),
-                    child: Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment
-                              .end,
-                      children: [
-                        Expanded(
-                          child:
-                              TextField(
-                            controller:
-                                _commentController,
-                            minLines: 1,
-                            maxLines: 4,
-                            textCapitalization:
-                                TextCapitalization
-                                    .sentences,
-                            decoration:
-                                InputDecoration(
-                              hintText:
-                                  'Write a comment...',
-                              border:
-                                  OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  24,
-                                ),
-                              ),
-                              contentPadding:
-                                  const EdgeInsets
-                                      .symmetric(
-                                horizontal:
-                                    16,
-                                vertical:
-                                    10,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(
-                          width: 6,
-                        ),
-                        IconButton(
-                          onPressed:
-                              _isCommenting
-                                  ? null
-                                  : _addComment,
-                          tooltip:
-                              'Send comment',
-                          icon:
-                              _isCommenting
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child:
-                                          CircularProgressIndicator(
-                                        strokeWidth:
-                                            2,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons
-                                          .send_rounded,
-                                    ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
