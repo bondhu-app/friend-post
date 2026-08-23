@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'profile_screen.dart';
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -29,19 +31,20 @@ class HomeScreen extends StatelessWidget {
             onPressed: () async {
               await _logout(context);
             },
-            icon: const Icon(Icons.logout_rounded),
+            icon: const Icon(
+              Icons.logout_rounded,
+            ),
           ),
         ],
       ),
-
       body: RefreshIndicator(
         onRefresh: () async {
           await Future<void>.delayed(
             const Duration(milliseconds: 500),
           );
         },
-
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(20),
           children: [
             const SizedBox(height: 10),
@@ -132,11 +135,9 @@ class HomeScreen extends StatelessWidget {
                   'View and manage your profile',
                 ),
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Profile section will be added next.',
-                      ),
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ProfileScreen(),
                     ),
                   );
                 },
@@ -177,15 +178,89 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
 
+            const SizedBox(height: 12),
+
+            Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.withValues(
+                    alpha: 0.12,
+                  ),
+                  child: const Icon(
+                    Icons.people_alt_rounded,
+                    color: Colors.blue,
+                  ),
+                ),
+                title: const Text(
+                  'Friends',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Find and connect with friends',
+                ),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Friends section will be added next.',
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.withValues(
+                    alpha: 0.12,
+                  ),
+                  child: const Icon(
+                    Icons.settings_rounded,
+                    color: Colors.blue,
+                  ),
+                ),
+                title: const Text(
+                  'Settings',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Manage your account settings',
+                ),
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Settings section will be added next.',
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
             const SizedBox(height: 30),
 
             OutlinedButton.icon(
               onPressed: () async {
                 await _logout(context);
               },
-              icon: const Icon(Icons.logout_rounded),
-              label: const Text('Logout'),
+              icon: const Icon(
+                Icons.logout_rounded,
+              ),
+              label: const Text(
+                'Logout',
+              ),
             ),
+
+            const SizedBox(height: 20),
           ],
         ),
       ),
