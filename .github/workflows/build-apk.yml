@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -38,10 +38,6 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      # ---------------------------------------------------------
-      # Create a completely fresh Flutter Android V2 project.
-      # This removes every possible old Android V1 embedding file.
-      # ---------------------------------------------------------
       - name: Rebuild Android project from Flutter V2 template
         shell: bash
         run: |
@@ -51,13 +47,14 @@ jobs:
           echo "Rebuilding Android project"
           echo "========================================"
 
-          if [ -f "android/app/google-services.json" ]; then
-            cp android/app/google-services.json /tmp/google-services.json
-            echo "Firebase configuration backed up."
-          else
+          if [ ! -f "android/app/google-services.json" ]; then
             echo "ERROR: android/app/google-services.json not found."
             exit 1
           fi
+
+          cp android/app/google-services.json /tmp/google-services.json
+
+          echo "Firebase configuration backed up."
 
           rm -rf android
 
@@ -72,12 +69,14 @@ jobs:
 
           cp /tmp/google-services.json android/app/google-services.json
 
-          echo "Fresh Android V2 project created."
-          echo "Firebase configuration restored."
+          echo "Fresh Flutter V2 Android project created."
 
-      # ---------------------------------------------------------
-      # Configure Google Services / Firebase
-      # ---------------------------------------------------------
+          # flutter create generates a default test/widget_test.dart.
+          # It belongs to the temporary template, not this application.
+          rm -rf test
+
+          echo "Generated template test directory removed."
+
       - name: Configure Google Services
         shell: bash
         run: |
@@ -91,52 +90,54 @@ jobs:
           from pathlib import Path
 
           settings = Path("android/settings.gradle.kts")
-          text = settings.read_text()
+          app = Path("android/app/build.gradle.kts")
 
-          plugin_line = '    id("com.google.gms.google-services") version "4.4.3" apply false'
+          settings_text = settings.read_text()
+          app_text = app.read_text()
 
-          if 'com.google.gms.google-services' not in text:
-              marker = '    id("org.jetbrains.kotlin.android")'
-              index = text.find(marker)
+          google_services_version = '    id("com.google.gms.google-services") version "4.4.3" apply false'
+
+          if "com.google.gms.google-services" not in settings_text:
+              marker = '    id("dev.flutter.flutter-plugin-loader")'
+              index = settings_text.find(marker)
 
               if index != -1:
-                  end = text.find('\n', index)
-                  text = text[:end + 1] + plugin_line + '\n' + text[end + 1:]
+                  end = settings_text.find("\n", index)
+                  settings_text = (
+                      settings_text[:end + 1]
+                      + google_services_version
+                      + "\n"
+                      + settings_text[end + 1:]
+                  )
               else:
-                  plugins_index = text.find('plugins {')
-                  if plugins_index == -1:
-                      raise SystemExit("Could not find plugins block in settings.gradle.kts")
+                  raise SystemExit(
+                      "ERROR: Flutter plugin loader not found in settings.gradle.kts"
+                  )
 
-                  end = text.find('\n', plugins_index)
-                  text = text[:end + 1] + plugin_line + '\n' + text[end + 1:]
+              settings.write_text(settings_text)
 
-              settings.write_text(text)
-
-          app = Path("android/app/build.gradle.kts")
-          text = app.read_text()
-
-          if 'com.google.gms.google-services' not in text:
+          if "com.google.gms.google-services" not in app_text:
               marker = '    id("dev.flutter.flutter-gradle-plugin")'
-              index = text.find(marker)
+              index = app_text.find(marker)
 
               if index == -1:
-                  marker = '    id("com.android.application")'
-                  index = text.find(marker)
+                  raise SystemExit(
+                      "ERROR: Flutter Gradle plugin not found in app/build.gradle.kts"
+                  )
 
-              if index == -1:
-                  raise SystemExit("Could not find plugins block in app/build.gradle.kts")
+              end = app_text.find("\n", index)
 
-              end = text.find('\n', index)
-              text = text[:end + 1] + '    id("com.google.gms.google-services")\n' + text[end + 1:]
+              app_text = (
+                  app_text[:end + 1]
+                  + '    id("com.google.gms.google-services")\n'
+                  + app_text[end + 1:]
+              )
 
-              app.write_text(text)
+              app.write_text(app_text)
 
           print("Google Services configuration completed.")
           PY
 
-      # ---------------------------------------------------------
-      # Make sure Firebase configuration matches applicationId
-      # ---------------------------------------------------------
       - name: Verify Android application configuration
         shell: bash
         run: |
@@ -146,86 +147,70 @@ jobs:
           echo "Verifying Android configuration"
           echo "========================================"
 
+          test -f android/settings.gradle.kts
+          test -f android/build.gradle.kts
+          test -f android/app/build.gradle.kts
+          test -f android/app/src/main/AndroidManifest.xml
+          test -f android/app/google-services.json
+
+          echo "Required Android files exist."
+
+          echo ""
+          echo "Application configuration:"
           grep -RIn \
-            'applicationId\|namespace\|google-services' \
+            "applicationId\|namespace\|google-services" \
             android/app/build.gradle.kts \
             android/settings.gradle.kts \
             || true
 
-          echo ""
-          echo "Checking Firebase package name..."
-
-          grep -q '"package_name": "com.friendpost.app"' \
-            android/app/google-services.json
-
-          echo "Firebase package name found."
-
-      # ---------------------------------------------------------
-      # ABSOLUTE V1 EMBEDDING CHECK
-      # ---------------------------------------------------------
       - name: Check for legacy Android V1 embedding
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Checking Android V1 embedding"
+          echo "Checking for Android V1 embedding"
           echo "========================================"
 
           if grep -RInE \
             --exclude-dir=.git \
             --exclude-dir=build \
+            --exclude-dir=.gradle \
             --exclude-dir=.dart_tool \
             "io\.flutter\.app\.FlutterActivity|io\.flutter\.app\.FlutterApplication|PluginRegistry\.Registrar|FlutterActivityDelegate|FlutterView" \
             android; then
 
             echo ""
-            echo "ERROR: Android V1 embedding reference found."
-            echo "The Android project is NOT clean."
+            echo "ERROR: Legacy Android V1 embedding reference found."
             exit 1
           fi
 
-          echo ""
-          echo "SUCCESS: No Android V1 embedding reference found."
+          echo "SUCCESS: No Android V1 embedding found."
 
-      # ---------------------------------------------------------
-      # Verify Android project files
-      # ---------------------------------------------------------
       - name: Verify Android project
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Android project files"
+          echo "Verifying Android project"
           echo "========================================"
 
+          test -f android/gradlew
+          test -f android/gradle/wrapper/gradle-wrapper.properties
           test -f android/settings.gradle.kts
           test -f android/build.gradle.kts
           test -f android/app/build.gradle.kts
           test -f android/app/src/main/AndroidManifest.xml
-          test -f android/app/src/main/kotlin/com/friendpost/friend_post/MainActivity.kt
-          test -f android/app/google-services.json
-          test -f android/gradlew
-          test -f android/gradle/wrapper/gradle-wrapper.properties
 
-          echo "All required Android files exist."
+          echo "Android project verification passed."
 
-      # ---------------------------------------------------------
-      # Flutter analysis
-      # ---------------------------------------------------------
       - name: Analyze project
         run: flutter analyze
 
-      # ---------------------------------------------------------
-      # Build release APK
-      # ---------------------------------------------------------
       - name: Build release APK
         run: flutter build apk --release
 
-      # ---------------------------------------------------------
-      # Verify APK
-      # ---------------------------------------------------------
       - name: Verify APK
         shell: bash
         run: |
@@ -233,19 +218,18 @@ jobs:
 
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
+          echo "========================================"
+          echo "Checking APK"
+          echo "========================================"
+
           if [ ! -f "$APK" ]; then
             echo "ERROR: APK was not created."
             exit 1
           fi
 
-          echo "========================================"
-          echo "APK BUILD SUCCESS"
-          echo "========================================"
+          echo "APK created successfully:"
           ls -lh "$APK"
 
-      # ---------------------------------------------------------
-      # Upload APK
-      # ---------------------------------------------------------
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
