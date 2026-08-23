@@ -71,58 +71,59 @@ jobs:
 
           echo "Fresh Flutter V2 Android project created."
 
-          # flutter create generates a default test/widget_test.dart.
-          # It belongs to the temporary template, not this application.
+          # Remove Flutter's temporary default test project.
           rm -rf test
 
           echo "Generated template test directory removed."
 
-      - name: Configure Google Services
+      - name: Configure Android package and Google Services
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Configuring Google Services"
+          echo "Configuring Android package"
           echo "========================================"
 
           python3 - <<'PY'
           from pathlib import Path
 
-          settings = Path("android/settings.gradle.kts")
           app = Path("android/app/build.gradle.kts")
+          settings = Path("android/settings.gradle.kts")
 
-          settings_text = settings.read_text()
           app_text = app.read_text()
+          settings_text = settings.read_text()
 
-          google_services_version = '    id("com.google.gms.google-services") version "4.4.3" apply false'
+          # Firebase google-services.json contains:
+          #
+          # com.friendpost.app
+          #
+          # Therefore the Android APPLICATION ID must be:
+          #
+          # com.friendpost.app
+          #
+          # Namespace is intentionally left as the Flutter-generated
+          # namespace. namespace and applicationId are allowed to differ.
 
-          if "com.google.gms.google-services" not in settings_text:
-              marker = '    id("dev.flutter.flutter-plugin-loader")'
-              index = settings_text.find(marker)
+          old_id = 'applicationId = "com.friendpost.friend_post"'
+          new_id = 'applicationId = "com.friendpost.app"'
 
-              if index != -1:
-                  end = settings_text.find("\n", index)
-                  settings_text = (
-                      settings_text[:end + 1]
-                      + google_services_version
-                      + "\n"
-                      + settings_text[end + 1:]
-                  )
-              else:
-                  raise SystemExit(
-                      "ERROR: Flutter plugin loader not found in settings.gradle.kts"
-                  )
+          if old_id not in app_text:
+              raise SystemExit(
+                  "ERROR: Expected generated applicationId was not found."
+              )
 
-              settings.write_text(settings_text)
+          app_text = app_text.replace(old_id, new_id, 1)
 
-          if "com.google.gms.google-services" not in app_text:
+          # Add Google Services plugin to app module.
+          if 'id("com.google.gms.google-services")' not in app_text:
               marker = '    id("dev.flutter.flutter-gradle-plugin")'
+
               index = app_text.find(marker)
 
               if index == -1:
                   raise SystemExit(
-                      "ERROR: Flutter Gradle plugin not found in app/build.gradle.kts"
+                      "ERROR: Flutter Gradle plugin not found."
                   )
 
               end = app_text.find("\n", index)
@@ -133,35 +134,60 @@ jobs:
                   + app_text[end + 1:]
               )
 
-              app.write_text(app_text)
+          # Add Google Services plugin version to settings.
+          if 'id("com.google.gms.google-services")' not in settings_text:
+              marker = '    id("dev.flutter.flutter-plugin-loader")'
 
-          print("Google Services configuration completed.")
+              index = settings_text.find(marker)
+
+              if index == -1:
+                  raise SystemExit(
+                      "ERROR: Flutter plugin loader not found."
+                  )
+
+              end = settings_text.find("\n", index)
+
+              settings_text = (
+                  settings_text[:end + 1]
+                  + '    id("com.google.gms.google-services") version "4.4.3" apply false\n'
+                  + settings_text[end + 1:]
+              )
+
+          app.write_text(app_text)
+          settings.write_text(settings_text)
+
+          print("Android applicationId set to com.friendpost.app")
+          print("Google Services plugin configured.")
           PY
 
-      - name: Verify Android application configuration
+      - name: Verify Firebase package configuration
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Verifying Android configuration"
+          echo "Verifying Firebase package"
           echo "========================================"
 
-          test -f android/settings.gradle.kts
-          test -f android/build.gradle.kts
-          test -f android/app/build.gradle.kts
-          test -f android/app/src/main/AndroidManifest.xml
-          test -f android/app/google-services.json
-
-          echo "Required Android files exist."
+          echo ""
+          echo "Android applicationId:"
+          grep "applicationId" android/app/build.gradle.kts
 
           echo ""
-          echo "Application configuration:"
-          grep -RIn \
-            "applicationId\|namespace\|google-services" \
-            android/app/build.gradle.kts \
-            android/settings.gradle.kts \
-            || true
+          echo "Firebase package:"
+          grep -n '"package_name"' android/app/google-services.json
+
+          echo ""
+          echo "Checking package match..."
+
+          grep -q 'applicationId = "com.friendpost.app"' \
+            android/app/build.gradle.kts
+
+          grep -q '"package_name": "com.friendpost.app"' \
+            android/app/google-services.json
+
+          echo ""
+          echo "SUCCESS: Android and Firebase package names match."
 
       - name: Check for legacy Android V1 embedding
         shell: bash
@@ -181,7 +207,7 @@ jobs:
             android; then
 
             echo ""
-            echo "ERROR: Legacy Android V1 embedding reference found."
+            echo "ERROR: Legacy Android V1 embedding found."
             exit 1
           fi
 
@@ -202,6 +228,7 @@ jobs:
           test -f android/build.gradle.kts
           test -f android/app/build.gradle.kts
           test -f android/app/src/main/AndroidManifest.xml
+          test -f android/app/google-services.json
 
           echo "Android project verification passed."
 
@@ -227,7 +254,8 @@ jobs:
             exit 1
           fi
 
-          echo "APK created successfully:"
+          echo ""
+          echo "APK BUILD SUCCESS"
           ls -lh "$APK"
 
       - name: Upload APK
