@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'friends_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
       FirebaseFirestore.instance;
 
   int _currentIndex = 0;
+
   bool _isLoading = true;
 
   String _userName = 'Friend';
@@ -46,49 +48,40 @@ class _HomeScreenState extends State<HomeScreen> {
           .doc(user.uid)
           .get();
 
-      if (doc.exists) {
-        final data = doc.data();
+      final data = doc.data();
 
-        if (mounted) {
-          setState(() {
-            _userName =
-                (data?['name'] ??
-                        user.displayName ??
-                        'Friend')
-                    .toString();
+      if (!mounted) return;
 
-            _userPhotoUrl =
-                (data?['photoUrl'] ?? '').toString();
+      setState(() {
+        _userName =
+            (data?['name'] ??
+                    user.displayName ??
+                    'Friend')
+                .toString();
 
-            _isLoading = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _userName =
-                user.displayName ?? 'Friend';
-            _isLoading = false;
-          });
-        }
-      }
+        _userPhotoUrl =
+            (data?['photoUrl'] ?? '').toString();
+
+        _isLoading = false;
+      });
     } catch (e) {
       debugPrint(
         'Load user data error: $e',
       );
 
-      if (mounted) {
-        setState(() {
-          _userName =
-              user.displayName ?? 'Friend';
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _userName =
+            user.displayName ?? 'Friend';
+
+        _isLoading = false;
+      });
     }
   }
 
   Future<void> _logout() async {
-    final shouldLogout =
+    final confirm =
         await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -121,9 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
 
-    if (shouldLogout != true) {
-      return;
-    }
+    if (confirm != true) return;
 
     try {
       await _auth.signOut();
@@ -149,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _buildAvatar({
+  Widget _avatar({
     double radius = 24,
   }) {
     if (_userPhotoUrl.isNotEmpty) {
@@ -176,13 +167,22 @@ class _HomeScreenState extends State<HomeScreen> {
             const FriendsScreen(),
       ),
     );
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            const ProfileScreen(),
+      ),
+    );
 
     if (!mounted) return;
 
     await _loadUserData();
   }
 
-  Widget _buildHomePage() {
+  Widget _homePage() {
     return RefreshIndicator(
       onRefresh: _loadUserData,
       child: ListView(
@@ -190,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              _buildAvatar(radius: 28),
+              _avatar(radius: 28),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -200,11 +200,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Text(
                       'Welcome back!',
                       style: TextStyle(
-                        fontSize: 14,
                         color: Colors.grey,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       _userName,
                       style: const TextStyle(
@@ -256,14 +255,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      _buildAvatar(
-                        radius: 22,
-                      ),
-                      const SizedBox(
-                        width: 12,
-                      ),
+                      _avatar(radius: 22),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: OutlinedButton(
+                        child:
+                            OutlinedButton(
                           onPressed: () {
                             ScaffoldMessenger
                                     .of(
@@ -276,8 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             );
                           },
-                          child:
-                              const Align(
+                          child: const Align(
                             alignment:
                                 Alignment
                                     .centerLeft,
@@ -289,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
@@ -308,8 +303,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                           icon: const Icon(
-                            Icons
-                                .photo_outlined,
+                            Icons.photo_outlined,
                           ),
                           label:
                               const Text(
@@ -390,26 +384,20 @@ class _HomeScreenState extends State<HomeScreen> {
             builder:
                 (context, snapshot) {
               if (snapshot.hasError) {
-                return Card(
+                return const Card(
                   child: Padding(
                     padding:
-                        const EdgeInsets.all(
-                      20,
-                    ),
+                        EdgeInsets.all(24),
                     child: Column(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons
                               .article_outlined,
-                          size: 45,
+                          size: 48,
                         ),
-                        const SizedBox(
-                          height: 10,
-                        ),
-                        const Text(
+                        SizedBox(height: 10),
+                        Text(
                           'No posts available yet.',
-                          textAlign:
-                              TextAlign.center,
                         ),
                       ],
                     ),
@@ -417,8 +405,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               }
 
-              if (snapshot
-                      .connectionState ==
+              if (snapshot.connectionState ==
                   ConnectionState.waiting) {
                 return const Center(
                   child: Padding(
@@ -431,45 +418,36 @@ class _HomeScreenState extends State<HomeScreen> {
               }
 
               final posts =
-                  snapshot.data?.docs ??
-                      [];
+                  snapshot.data?.docs ?? [];
 
               if (posts.isEmpty) {
-                return Card(
+                return const Card(
                   child: Padding(
                     padding:
-                        const EdgeInsets.all(
-                      25,
-                    ),
+                        EdgeInsets.all(25),
                     child: Column(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons
                               .dynamic_feed_outlined,
                           size: 50,
                         ),
-                        const SizedBox(
-                          height: 12,
-                        ),
-                        const Text(
+                        SizedBox(height: 12),
+                        Text(
                           'No posts yet.',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight:
-                                FontWeight
-                                    .w600,
+                                FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(
-                          height: 6,
-                        ),
-                        const Text(
+                        SizedBox(height: 6),
+                        Text(
                           'Be the first person to create a post.',
                           textAlign:
                               TextAlign.center,
                           style: TextStyle(
-                            color:
-                                Colors.grey,
+                            color: Colors.grey,
                           ),
                         ),
                       ],
@@ -479,12 +457,11 @@ class _HomeScreenState extends State<HomeScreen> {
               }
 
               return Column(
-                children:
-                    posts.map((post) {
-                  return _buildPostCard(
-                    post,
-                  );
-                }).toList(),
+                children: posts
+                    .map(
+                      _postCard,
+                    )
+                    .toList(),
               );
             },
           ),
@@ -493,17 +470,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPostCard(
+  Widget _postCard(
     QueryDocumentSnapshot<
             Map<String, dynamic>>
         post,
   ) {
     final data = post.data();
 
-    final name = (data['userName'] ??
-            data['name'] ??
-            'Friend')
-        .toString();
+    final name =
+        (data['userName'] ??
+                data['name'] ??
+                'Friend')
+            .toString();
 
     final text =
         (data['text'] ??
@@ -511,18 +489,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 '')
             .toString();
 
-    final photoUrl =
-        (data['photoUrl'] ?? '')
-            .toString();
-
     final imageUrl =
         (data['imageUrl'] ?? '')
             .toString();
 
+    final photoUrl =
+        (data['photoUrl'] ?? '')
+            .toString();
+
     final likes =
-        (data['likeCount'] ??
+        data['likeCount'] ??
             data['likes'] ??
-            0);
+            0;
 
     return Card(
       margin:
@@ -553,9 +531,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icons.person,
                     ),
                   ),
-                const SizedBox(
-                  width: 12,
-                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     name,
@@ -567,19 +543,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(
-                    Icons.more_horiz,
-                  ),
+                const Icon(
+                  Icons.more_horiz,
                 ),
               ],
             ),
 
             if (text.isNotEmpty) ...[
-              const SizedBox(
-                height: 14,
-              ),
+              const SizedBox(height: 14),
               Text(
                 text,
                 style:
@@ -590,9 +561,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
 
             if (imageUrl.isNotEmpty) ...[
-              const SizedBox(
-                height: 14,
-              ),
+              const SizedBox(height: 14),
               ClipRRect(
                 borderRadius:
                     BorderRadius.circular(
@@ -603,7 +572,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   width:
                       double.infinity,
                   fit: BoxFit.cover,
-                  errorBuilder: (
+                  errorBuilder:
+                      (
                     context,
                     error,
                     stackTrace,
@@ -623,9 +593,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
 
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 10),
 
             Row(
               children: [
@@ -663,113 +631,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProfilePage() {
-    return SingleChildScrollView(
-      padding:
-          const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          const SizedBox(height: 20),
-
-          _buildAvatar(radius: 55),
-
-          const SizedBox(height: 16),
-
-          Text(
-            _userName,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 6),
-
-          Text(
-            _auth.currentUser?.email ??
-                '',
-            style:
-                const TextStyle(
-              color: Colors.grey,
-            ),
-          ),
-
-          const SizedBox(height: 25),
-
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.person_outline,
-                  ),
-                  title: const Text(
-                    'My Profile',
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {},
-                ),
-                const Divider(
-                  height: 1,
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons
-                        .edit_outlined,
-                  ),
-                  title: const Text(
-                    'Edit Profile',
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {},
-                ),
-                const Divider(
-                  height: 1,
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons
-                        .settings_outlined,
-                  ),
-                  title: const Text(
-                    'Settings',
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {
-                    setState(() {
-                      _currentIndex =
-                          3;
-                    });
-                  },
-                ),
-                const Divider(
-                  height: 1,
-                ),
-                ListTile(
-                  leading: const Icon(
-                    Icons.logout,
-                  ),
-                  title: const Text(
-                    'Logout',
-                  ),
-                  onTap: _logout,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsPage() {
+  Widget _settingsPage() {
     return ListView(
       padding:
           const EdgeInsets.all(16),
@@ -782,11 +644,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 FontWeight.bold,
           ),
         ),
-
-        const SizedBox(
-          height: 20,
-        ),
-
+        const SizedBox(height: 20),
         Card(
           child: Column(
             children: [
@@ -803,9 +661,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onTap: () {},
               ),
-              const Divider(
-                height: 1,
-              ),
+              const Divider(height: 1),
               ListTile(
                 leading: const Icon(
                   Icons.lock_outline,
@@ -818,9 +674,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onTap: () {},
               ),
-              const Divider(
-                height: 1,
-              ),
+              const Divider(height: 1),
               ListTile(
                 leading: const Icon(
                   Icons
@@ -834,9 +688,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 onTap: () {},
               ),
-              const Divider(
-                height: 1,
-              ),
+              const Divider(height: 1),
               ListTile(
                 leading: const Icon(
                   Icons.info_outline,
@@ -854,21 +706,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         'Friend Post',
                     applicationVersion:
                         '1.0.0',
-                    applicationLegalese:
-                        'A social media app for connecting with friends.',
                   );
                 },
               ),
-              const Divider(
-                height: 1,
-              ),
+              const Divider(height: 1),
               ListTile(
                 leading: const Icon(
                   Icons.logout,
                 ),
-                title: const Text(
-                  'Logout',
-                ),
+                title:
+                    const Text('Logout'),
                 onTap: _logout,
               ),
             ],
@@ -878,7 +725,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  String _getTitle() {
+  Widget _currentPage() {
+    switch (_currentIndex) {
+      case 0:
+        return _homePage();
+
+      case 1:
+        return const FriendsScreen();
+
+      case 2:
+        return ProfileScreen(
+          key: const ValueKey(
+            'profile-screen',
+          ),
+        );
+
+      case 3:
+        return _settingsPage();
+
+      default:
+        return _homePage();
+    }
+  }
+
+  String _title() {
     switch (_currentIndex) {
       case 0:
         return 'Friend Post';
@@ -893,29 +763,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _getCurrentPage() {
-    switch (_currentIndex) {
-      case 0:
-        return _buildHomePage();
-
-      case 1:
-        return const FriendsScreen();
-
-      case 2:
-        return _buildProfilePage();
-
-      case 3:
-        return _buildSettingsPage();
-
-      default:
-        return _buildHomePage();
-    }
-  }
-
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
         body: Center(
@@ -928,9 +777,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _getTitle(),
-          style:
-              const TextStyle(
+          _title(),
+          style: const TextStyle(
             fontWeight:
                 FontWeight.bold,
           ),
@@ -938,31 +786,15 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           if (_currentIndex == 0)
             IconButton(
-              onPressed:
-                  _loadUserData,
+              onPressed: _loadUserData,
               icon: const Icon(
                 Icons.refresh,
-              ),
-            ),
-          if (_currentIndex == 1)
-            IconButton(
-              onPressed: () {
-                Navigator.of(context)
-                    .push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const FriendsScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(
-                Icons.person_add_alt_1,
               ),
             ),
         ],
       ),
 
-      body: _getCurrentPage(),
+      body: _currentPage(),
 
       bottomNavigationBar:
           NavigationBar(
@@ -971,8 +803,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onDestinationSelected:
             (index) {
           setState(() {
-            _currentIndex =
-                index;
+            _currentIndex = index;
           });
         },
         destinations: const [
