@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class NotificationService {
   NotificationService._();
@@ -66,9 +67,7 @@ class NotificationService {
             FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      // Notification failure should not break
-      // the main action such as like/comment.
-      print(
+      debugPrint(
         'Create notification error: $e',
       );
     }
@@ -180,7 +179,7 @@ class NotificationService {
             FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print(
+      debugPrint(
         'Mark notification read error: $e',
       );
     }
@@ -226,7 +225,7 @@ class NotificationService {
 
       await batch.commit();
     } catch (e) {
-      print(
+      debugPrint(
         'Mark all notifications read error: $e',
       );
     }
@@ -244,7 +243,7 @@ class NotificationService {
           .doc(notificationId)
           .delete();
     } catch (e) {
-      print(
+      debugPrint(
         'Delete notification error: $e',
       );
     }
