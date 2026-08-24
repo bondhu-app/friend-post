@@ -5,7 +5,7 @@ import '../widgets/comment_section.dart';
 import '../widgets/like_button.dart';
 
 class PostDetailScreen extends StatelessWidget {
-  const PostDetailScreen({
+  PostDetailScreen({
     super.key,
     required this.postId,
   });
@@ -29,6 +29,7 @@ class PostDetailScreen extends StatelessWidget {
     }
 
     final date = value.toDate();
+
     final difference =
         DateTime.now().difference(date);
 
@@ -116,8 +117,7 @@ class PostDetailScreen extends StatelessWidget {
           final data =
               document.data() ?? {};
 
-          final postIdValue =
-              document.id;
+          final postIdValue = document.id;
 
           final userName =
               (data['userName'] ??
@@ -179,7 +179,8 @@ class PostDetailScreen extends StatelessWidget {
                             Expanded(
                               child: Column(
                                 crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                    CrossAxisAlignment
+                                        .start,
                                 children: [
                                   Text(
                                     userName,
