@@ -3,7 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class CreatePostScreen extends StatefulWidget {
-  const CreatePostScreen({super.key});
+  const CreatePostScreen({
+    super.key,
+  });
 
   @override
   State<CreatePostScreen> createState() =>
@@ -12,90 +14,35 @@ class CreatePostScreen extends StatefulWidget {
 
 class _CreatePostScreenState
     extends State<CreatePostScreen> {
+  final TextEditingController _postController =
+      TextEditingController();
+
   final FirebaseAuth _auth =
       FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
-  final TextEditingController _textController =
-      TextEditingController();
-
   bool _isPosting = false;
-
-  String _userName = 'Friend';
-  String _userPhotoUrl = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserData();
-  }
 
   @override
   void dispose() {
-    _textController.dispose();
+    _postController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadUserData() async {
-    final user = _auth.currentUser;
-
-    if (user == null) return;
-
-    try {
-      final document = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      final data = document.data();
-
-      if (!mounted) return;
-
-      setState(() {
-        _userName = (data?['name'] ??
-                user.displayName ??
-                'Friend')
-            .toString();
-
-        _userPhotoUrl =
-            (data?['photoUrl'] ?? '')
-                .toString();
-      });
-    } catch (e) {
-      debugPrint(
-        'Load user data error: $e',
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _userName =
-            user.displayName ?? 'Friend';
-
-        _userPhotoUrl =
-            user.photoURL ?? '';
-      });
-    }
-  }
-
   Future<void> _createPost() async {
-    final user = _auth.currentUser;
-
-    if (user == null) {
-      _showMessage(
-        'Please login first.',
-      );
-      return;
-    }
-
     final text =
-        _textController.text.trim();
+        _postController.text.trim();
 
     if (text.isEmpty) {
-      _showMessage(
-        'Please write something first.',
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please write something first.',
+          ),
+        ),
       );
       return;
     }
@@ -104,93 +51,112 @@ class _CreatePostScreenState
       return;
     }
 
-    FocusScope.of(context).unfocus();
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please login first.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final messenger =
+        ScaffoldMessenger.of(context);
 
     setState(() {
       _isPosting = true;
     });
 
     try {
+      final userReference = _firestore
+          .collection('users')
+          .doc(user.uid);
+
+      final userSnapshot =
+          await userReference.get();
+
+      final userData =
+          userSnapshot.data() ?? {};
+
+      final userName =
+          (userData['name'] ??
+                  userData['userName'] ??
+                  user.displayName ??
+                  'Friend')
+              .toString()
+              .trim();
+
+      final photoUrl =
+          (userData['photoUrl'] ??
+                  userData['profileImage'] ??
+                  '')
+              .toString()
+              .trim();
+
       final postReference =
-          _firestore
-              .collection('posts')
-              .doc();
+          _firestore.collection('posts').doc();
 
       await postReference.set({
-        'postId':
-            postReference.id,
-
-        'uid':
-            user.uid,
-
-        'userId':
-            user.uid,
-
-        'userName':
-            _userName,
-
-        'name':
-            _userName,
-
-        'photoUrl':
-            _userPhotoUrl,
-
-        'text':
-            text,
-
-        'content':
-            text,
-
-        'imageUrl':
-            '',
-
-        'likeCount':
-            0,
-
-        'likes':
-            0,
-
-        'commentCount':
-            0,
-
+        'postId': postReference.id,
+        'uid': user.uid,
+        'userId': user.uid,
+        'ownerId': user.uid,
+        'userName': userName.isEmpty
+            ? 'Friend'
+            : userName,
+        'name': userName.isEmpty
+            ? 'Friend'
+            : userName,
+        'userPhotoUrl': photoUrl,
+        'photoUrl': photoUrl,
+        'text': text,
+        'content': text,
+        'imageUrl': '',
+        'image': '',
+        'likeCount': 0,
+        'commentCount': 0,
         'createdAt':
             FieldValue.serverTimestamp(),
-
         'updatedAt':
             FieldValue.serverTimestamp(),
       });
 
-      try {
-        await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .update({
-          'postCount':
-              FieldValue.increment(1),
-          'updatedAt':
-              FieldValue.serverTimestamp(),
-        });
-      } catch (e) {
-        debugPrint(
-          'Post count update error: $e',
-        );
-      }
+      _postController.clear();
 
-      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Post published successfully!',
+          ),
+        ),
+      );
+
+      if (!mounted) {
+        return;
+      }
 
       Navigator.of(context).pop(true);
     } on FirebaseException catch (e) {
-      _showMessage(
-        e.message ??
-            'Could not create post.',
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            e.message ??
+                'Could not publish the post.',
+          ),
+        ),
       );
-    } catch (e) {
-      debugPrint(
-        'Create post error: $e',
-      );
-
-      _showMessage(
-        'Could not create post. Please try again.',
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not publish the post. Please try again.',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -201,61 +167,32 @@ class _CreatePostScreenState
     }
   }
 
-  void _showMessage(
-    String message,
-  ) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
-    );
-  }
-
-  Widget _buildAvatar() {
-    if (_userPhotoUrl.trim().isNotEmpty) {
-      return CircleAvatar(
-        radius: 25,
-        backgroundImage:
-            NetworkImage(_userPhotoUrl),
-      );
-    }
-
-    return const CircleAvatar(
-      radius: 25,
-      child: Icon(
-        Icons.person,
-        size: 28,
-      ),
-    );
-  }
-
   @override
   Widget build(
     BuildContext context,
   ) {
+    final theme =
+        Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
           'Create Post',
           style: TextStyle(
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
+        centerTitle: false,
         actions: [
           Padding(
             padding:
                 const EdgeInsets.only(
-              right: 10,
+              right: 12,
             ),
             child: FilledButton(
-              onPressed:
-                  _isPosting
-                      ? null
-                      : _createPost,
+              onPressed: _isPosting
+                  ? null
+                  : _createPost,
               child: _isPosting
                   ? const SizedBox(
                       width: 20,
@@ -280,114 +217,175 @@ class _CreatePostScreenState
             crossAxisAlignment:
                 CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  _buildAvatar(),
-                  const SizedBox(
-                    width: 12,
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.all(16),
+                decoration:
+                    BoxDecoration(
+                  color: theme
+                      .colorScheme
+                      .surfaceContainerHighest,
+                  borderRadius:
+                      BorderRadius.circular(
+                    16,
                   ),
-                  Expanded(
-                    child: Text(
-                      _userName,
-                      style:
-                          const TextStyle(
-                        fontSize: 18,
-                        fontWeight:
-                            FontWeight.bold,
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor:
+                          theme
+                              .colorScheme
+                              .primaryContainer,
+                      child: Icon(
+                        Icons.person,
+                        color: theme
+                            .colorScheme
+                            .onPrimaryContainer,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(
+                      width: 12,
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Create a new post',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
 
               const SizedBox(
-                height: 22,
+                height: 18,
               ),
 
               TextField(
                 controller:
-                    _textController,
-                autofocus: true,
-                minLines: 7,
+                    _postController,
+                minLines: 8,
                 maxLines: 15,
+                maxLength: 5000,
                 textCapitalization:
-                    TextCapitalization
-                        .sentences,
+                    TextCapitalization.sentences,
                 decoration:
-                    const InputDecoration(
+                    InputDecoration(
                   hintText:
-                      'What\'s on your mind?',
+                      "What's on your mind?",
+                  alignLabelWithHint:
+                      true,
                   border:
-                      InputBorder.none,
-                ),
-                style:
-                    const TextStyle(
-                  fontSize: 20,
-                  height: 1.45,
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      16,
+                    ),
+                  ),
+                  enabledBorder:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      16,
+                    ),
+                    borderSide:
+                        BorderSide(
+                      color: theme
+                          .colorScheme
+                          .outline,
+                    ),
+                  ),
+                  focusedBorder:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      16,
+                    ),
+                    borderSide:
+                        BorderSide(
+                      color: theme
+                          .colorScheme
+                          .primary,
+                      width: 2,
+                    ),
+                  ),
+                  filled: true,
+                  fillColor:
+                      theme
+                          .colorScheme
+                          .surface,
                 ),
               ),
 
-              const Divider(
-                height: 30,
+              const SizedBox(
+                height: 12,
               ),
 
-              Card(
-                child: Column(
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.all(14),
+                decoration:
+                    BoxDecoration(
+                  borderRadius:
+                      BorderRadius.circular(
+                    14,
+                  ),
+                  border: Border.all(
+                    color: theme
+                        .colorScheme
+                        .outlineVariant,
+                  ),
+                ),
+                child: Row(
                   children: [
-                    ListTile(
-                      leading:
-                          const Icon(
-                        Icons
-                            .photo_outlined,
-                      ),
-                      title: const Text(
-                        'Photo / Video',
-                      ),
-                      subtitle:
-                          const Text(
-                        'Photo upload will be added next.',
-                      ),
-                      onTap: () {
-                        _showMessage(
-                          'Photo upload will be added next.',
-                        );
-                      },
+                    Icon(
+                      Icons.public,
+                      color: theme
+                          .colorScheme
+                          .primary,
                     ),
-                    const Divider(
-                      height: 1,
+                    const SizedBox(
+                      width: 10,
                     ),
-                    ListTile(
-                      leading:
-                          const Icon(
-                        Icons
-                            .emoji_emotions_outlined,
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+                        children: [
+                          Text(
+                            'Public post',
+                            style:
+                                TextStyle(
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(
+                            height: 2,
+                          ),
+                          Text(
+                            'Anyone can see this post.',
+                            style:
+                                TextStyle(
+                              color:
+                                  Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
-                      title: const Text(
-                        'Feeling / Activity',
-                      ),
-                      onTap: () {
-                        _showMessage(
-                          'Feeling feature will be added next.',
-                        );
-                      },
                     ),
-                    const Divider(
-                      height: 1,
-                    ),
-                    ListTile(
-                      leading:
-                          const Icon(
-                        Icons
-                            .location_on_outlined,
-                      ),
-                      title: const Text(
-                        'Check in',
-                      ),
-                      onTap: () {
-                        _showMessage(
-                          'Check-in feature will be added next.',
-                        );
-                      },
+                    Icon(
+                      Icons
+                          .check_circle,
                     ),
                   ],
                 ),
@@ -398,36 +396,51 @@ class _CreatePostScreenState
               ),
 
               SizedBox(
-                width:
-                    double.infinity,
-                height: 52,
+                width: double.infinity,
+                height: 54,
                 child: FilledButton.icon(
-                  onPressed:
-                      _isPosting
-                          ? null
-                          : _createPost,
-                  icon: const Icon(
-                    Icons.send_rounded,
-                  ),
-                  label: _isPosting
+                  onPressed: _isPosting
+                      ? null
+                      : _createPost,
+                  icon: _isPosting
                       ? const SizedBox(
-                          width: 22,
-                          height: 22,
+                          width: 20,
+                          height: 20,
                           child:
                               CircularProgressIndicator(
                             strokeWidth: 2,
                           ),
                         )
-                      : const Text(
-                          'Publish Post',
-                          style:
-                              TextStyle(
-                            fontSize: 16,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
+                      : const Icon(
+                          Icons.send_rounded,
                         ),
+                  label: Text(
+                    _isPosting
+                        ? 'Publishing...'
+                        : 'Publish Post',
+                    style:
+                        const TextStyle(
+                      fontSize: 16,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(
+                height: 20,
+              ),
+
+              const Center(
+                child: Text(
+                  'Be respectful and kind to other users.',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                  ),
+                  textAlign:
+                      TextAlign.center,
                 ),
               ),
             ],
