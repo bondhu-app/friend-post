@@ -5,12 +5,12 @@ import 'package:flutter/material.dart';
 import '../services/notification_service.dart';
 
 class CommentSection extends StatefulWidget {
-  final String postId;
-
   const CommentSection({
     super.key,
     required this.postId,
   });
+
+  final String postId;
 
   @override
   State<CommentSection> createState() =>
@@ -22,34 +22,25 @@ class _CommentSectionState
   final TextEditingController _commentController =
       TextEditingController();
 
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
-
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
+  final FirebaseAuth _auth =
+      FirebaseAuth.instance;
+
   bool _isSending = false;
-
-  CollectionReference<Map<String, dynamic>>
-      get _comments {
-    return _firestore
-        .collection('posts')
-        .doc(widget.postId)
-        .collection('comments');
-  }
-
-  DocumentReference<Map<String, dynamic>>
-      get _postReference {
-    return _firestore
-        .collection('posts')
-        .doc(widget.postId);
-  }
 
   @override
   void dispose() {
     _commentController.dispose();
     super.dispose();
   }
+
+  CollectionReference<Map<String, dynamic>>
+      get _comments => _firestore
+          .collection('posts')
+          .doc(widget.postId)
+          .collection('comments');
 
   Future<void> _sendComment() async {
     final user = _auth.currentUser;
@@ -75,13 +66,15 @@ class _CommentSectionState
     });
 
     try {
+      final postReference = _firestore
+          .collection('posts')
+          .doc(widget.postId);
+
       final postSnapshot =
-          await _postReference.get();
+          await postReference.get();
 
       if (!postSnapshot.exists) {
-        _showMessage(
-          'This post no longer exists.',
-        );
+        _showMessage('Post not found.');
         return;
       }
 
@@ -91,37 +84,61 @@ class _CommentSectionState
       final postOwnerId =
           (postData['uid'] ??
                   postData['userId'] ??
+                  postData['ownerId'] ??
                   '')
               .toString();
 
-      final comment =
+      final commentReference =
           _comments.doc();
 
-      await comment.set({
-        'commentId': comment.id,
-        'uid': user.uid,
+      final userName =
+          user.displayName?.trim().isNotEmpty ==
+                  true
+              ? user.displayName!.trim()
+              : 'Friend';
+
+      final commentData = {
+        'commentId': commentReference.id,
+        'postId': widget.postId,
         'userId': user.uid,
-        'userName':
-            user.displayName ?? 'Friend',
+        'uid': user.uid,
+        'userName': userName,
         'userPhotoUrl': '',
+        'photoUrl': '',
         'text': text,
+        'content': text,
         'createdAt':
             FieldValue.serverTimestamp(),
         'updatedAt':
             FieldValue.serverTimestamp(),
-      });
+      };
 
-      final currentCount =
+      final currentCommentCount =
           _toInt(
         postData['commentCount'],
       );
 
-      await _postReference.update({
-        'commentCount':
-            currentCount + 1,
-        'updatedAt':
-            FieldValue.serverTimestamp(),
-      });
+      final batch =
+          _firestore.batch();
+
+      batch.set(
+        commentReference,
+        commentData,
+      );
+
+      batch.update(
+        postReference,
+        {
+          'commentCount':
+              currentCommentCount + 1,
+          'updatedAt':
+              FieldValue.serverTimestamp(),
+        },
+      );
+
+      await batch.commit();
+
+      _commentController.clear();
 
       if (postOwnerId.isNotEmpty &&
           postOwnerId != user.uid) {
@@ -129,27 +146,17 @@ class _CommentSectionState
             .notifyComment(
           postOwnerId: postOwnerId,
           postId: widget.postId,
-          commentId: comment.id,
+          commentId: commentReference.id,
         );
       }
-
-      _commentController.clear();
-
-      if (!mounted) return;
-
-      FocusScope.of(context).unfocus();
     } on FirebaseException catch (e) {
       _showMessage(
         e.message ??
-            'Could not send comment.',
+            'Could not add your comment.',
       );
-    } catch (e) {
-      debugPrint(
-        'Send comment error: $e',
-      );
-
+    } catch (_) {
       _showMessage(
-        'Could not send comment.',
+        'Could not add your comment. Please try again.',
       );
     } finally {
       if (mounted) {
@@ -161,8 +168,7 @@ class _CommentSectionState
   }
 
   Future<void> _deleteComment(
-    DocumentSnapshot<Map<String, dynamic>>
-        comment,
+    String commentId,
   ) async {
     final user = _auth.currentUser;
 
@@ -170,73 +176,93 @@ class _CommentSectionState
       return;
     }
 
-    final data = comment.data();
-
-    if (data == null) {
-      return;
-    }
-
-    final commentUserId =
-        (data['uid'] ??
-                data['userId'] ??
-                '')
-            .toString();
-
-    if (commentUserId != user.uid) {
-      _showMessage(
-        'You can only delete your own comment.',
-      );
-      return;
-    }
-
     try {
-      await comment.reference.delete();
+      final commentReference =
+          _comments.doc(commentId);
+
+      final commentSnapshot =
+          await commentReference.get();
+
+      if (!commentSnapshot.exists) {
+        return;
+      }
+
+      final commentData =
+          commentSnapshot.data() ?? {};
+
+      final commentUserId =
+          (commentData['userId'] ??
+                  commentData['uid'] ??
+                  '')
+              .toString();
+
+      if (commentUserId != user.uid) {
+        _showMessage(
+          'You can only delete your own comment.',
+        );
+        return;
+      }
+
+      final postReference = _firestore
+          .collection('posts')
+          .doc(widget.postId);
 
       final postSnapshot =
-          await _postReference.get();
+          await postReference.get();
 
-      if (postSnapshot.exists) {
-        final postData =
-            postSnapshot.data() ?? {};
+      final postData =
+          postSnapshot.data() ?? {};
 
-        final currentCount =
-            _toInt(
-          postData['commentCount'],
-        );
-
-        await _postReference.update({
-          'commentCount':
-              currentCount > 0
-                  ? currentCount - 1
-                  : 0,
-          'updatedAt':
-              FieldValue.serverTimestamp(),
-        });
-      }
-    } catch (e) {
-      debugPrint(
-        'Delete comment error: $e',
+      final currentCommentCount =
+          _toInt(
+        postData['commentCount'],
       );
 
+      final batch =
+          _firestore.batch();
+
+      batch.delete(
+        commentReference,
+      );
+
+      if (postSnapshot.exists) {
+        batch.update(
+          postReference,
+          {
+            'commentCount':
+                currentCommentCount > 0
+                    ? currentCommentCount - 1
+                    : 0,
+            'updatedAt':
+                FieldValue.serverTimestamp(),
+          },
+        );
+      }
+
+      await batch.commit();
+    } on FirebaseException catch (e) {
       _showMessage(
-        'Could not delete comment.',
+        e.message ??
+            'Could not delete the comment.',
+      );
+    } catch (_) {
+      _showMessage(
+        'Could not delete the comment.',
       );
     }
   }
 
-  int _toInt(dynamic value) {
-    if (value is int) {
-      return value;
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
     }
 
-    if (value is num) {
-      return value.toInt();
-    }
-
-    return int.tryParse(
-          value?.toString() ?? '',
-        ) ??
-        0;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
   }
 
   String _formatDate(dynamic value) {
@@ -268,7 +294,9 @@ class _CommentSectionState
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  Widget _avatar(String photoUrl) {
+  Widget _buildAvatar(
+    String photoUrl,
+  ) {
     if (photoUrl.trim().isNotEmpty) {
       return CircleAvatar(
         radius: 20,
@@ -281,26 +309,177 @@ class _CommentSectionState
       radius: 20,
       child: Icon(
         Icons.person,
-        size: 20,
+        size: 22,
       ),
     );
   }
 
-  void _showMessage(String message) {
-    if (!mounted) return;
+  Widget _buildComment(
+    DocumentSnapshot<
+            Map<String, dynamic>>
+        document,
+  ) {
+    final data =
+        document.data() ?? {};
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
-      SnackBar(
-        content: Text(message),
+    final user = _auth.currentUser;
+
+    final userId =
+        (data['userId'] ??
+                data['uid'] ??
+                '')
+            .toString();
+
+    final userName =
+        (data['userName'] ??
+                data['name'] ??
+                'Friend')
+            .toString();
+
+    final photoUrl =
+        (data['userPhotoUrl'] ??
+                data['photoUrl'] ??
+                '')
+            .toString();
+
+    final text =
+        (data['text'] ??
+                data['content'] ??
+                '')
+            .toString();
+
+    final createdAt =
+        data['createdAt'];
+
+    final canDelete =
+        user != null &&
+            user.uid == userId;
+
+    return Padding(
+      padding:
+          const EdgeInsets.only(
+        bottom: 14,
+      ),
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          _buildAvatar(photoUrl),
+          const SizedBox(
+            width: 10,
+          ),
+          Expanded(
+            child: Container(
+              padding:
+                  const EdgeInsets.all(12),
+              decoration:
+                  BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest,
+                borderRadius:
+                    BorderRadius.circular(
+                  14,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          userName,
+                          style:
+                              const TextStyle(
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      if (canDelete)
+                        PopupMenuButton<String>(
+                          padding:
+                              EdgeInsets.zero,
+                          iconSize: 20,
+                          onSelected:
+                              (value) {
+                            if (value ==
+                                'delete') {
+                              _deleteComment(
+                                document.id,
+                              );
+                            }
+                          },
+                          itemBuilder:
+                              (context) {
+                            return const [
+                              PopupMenuItem<
+                                  String>(
+                                value:
+                                    'delete',
+                                child: Text(
+                                  'Delete',
+                                ),
+                              ),
+                            ];
+                          },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(
+                    height: 4,
+                  ),
+                  Text(
+                    text,
+                    style:
+                        const TextStyle(
+                      fontSize: 14,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 6,
+                  ),
+                  Text(
+                    _formatDate(
+                      createdAt,
+                    ),
+                    style:
+                        const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final user = _auth.currentUser;
-
+  Widget build(
+    BuildContext context,
+  ) {
     return Column(
       crossAxisAlignment:
           CrossAxisAlignment.start,
@@ -308,97 +487,34 @@ class _CommentSectionState
         const Text(
           'Comments',
           style: TextStyle(
-            fontSize: 20,
+            fontSize: 19,
             fontWeight: FontWeight.bold,
           ),
         ),
 
-        const SizedBox(height: 12),
-
-        if (user != null)
-          Row(
-            crossAxisAlignment:
-                CrossAxisAlignment.end,
-            children: [
-              const CircleAvatar(
-                radius: 20,
-                child: Icon(
-                  Icons.person,
-                  size: 20,
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: TextField(
-                  controller:
-                      _commentController,
-                  minLines: 1,
-                  maxLines: 4,
-                  textInputAction:
-                      TextInputAction.newline,
-                  decoration:
-                      InputDecoration(
-                    hintText:
-                        'Write a comment...',
-                    border:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(
-                        14,
-                      ),
-                    ),
-                    contentPadding:
-                        const EdgeInsets
-                            .symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 8),
-
-              IconButton.filled(
-                onPressed:
-                    _isSending
-                        ? null
-                        : _sendComment,
-                tooltip: 'Send comment',
-                icon: _isSending
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(
-                        Icons.send,
-                      ),
-              ),
-            ],
-          ),
-
-        const SizedBox(height: 18),
+        const SizedBox(
+          height: 14,
+        ),
 
         StreamBuilder<
-            QuerySnapshot<Map<String, dynamic>>>(
+            QuerySnapshot<
+                Map<String, dynamic>>>(
           stream: _comments
               .orderBy(
                 'createdAt',
-                descending: false,
+                descending: true,
               )
               .snapshots(),
-          builder:
-              (context, snapshot) {
+          builder: (
+            context,
+            snapshot,
+          ) {
             if (snapshot.hasError) {
               return const Padding(
                 padding:
-                    EdgeInsets.all(16),
+                    EdgeInsets.symmetric(
+                  vertical: 16,
+                ),
                 child: Text(
                   'Could not load comments.',
                 ),
@@ -407,9 +523,15 @@ class _CommentSectionState
 
             if (snapshot.connectionState ==
                 ConnectionState.waiting) {
-              return const Center(
-                child:
-                    CircularProgressIndicator(),
+              return const Padding(
+                padding:
+                    EdgeInsets.symmetric(
+                  vertical: 20,
+                ),
+                child: Center(
+                  child:
+                      CircularProgressIndicator(),
+                ),
               );
             }
 
@@ -420,186 +542,98 @@ class _CommentSectionState
               return const Padding(
                 padding:
                     EdgeInsets.symmetric(
-                  vertical: 20,
+                  vertical: 18,
                 ),
                 child: Center(
                   child: Text(
                     'No comments yet.',
-                    style: TextStyle(
-                      color: Colors.grey,
-                    ),
                   ),
                 ),
               );
             }
 
-            return ListView.separated(
-              shrinkWrap: true,
-              physics:
-                  const NeverScrollableScrollPhysics(),
-              itemCount: comments.length,
-              separatorBuilder:
-                  (context, index) {
-                return const SizedBox(
-                  height: 10,
-                );
-              },
-              itemBuilder:
-                  (context, index) {
-                final comment =
-                    comments[index];
-
-                final data =
-                    comment.data();
-
-                final name =
-                    (data['userName'] ??
-                            data['name'] ??
-                            'Friend')
-                        .toString();
-
-                final photoUrl =
-                    (data['userPhotoUrl'] ??
-                            data['photoUrl'] ??
-                            '')
-                        .toString();
-
-                final text =
-                    (data['text'] ??
-                            data['comment'] ??
-                            '')
-                        .toString();
-
-                final commentUserId =
-                    (data['uid'] ??
-                            data['userId'] ??
-                            '')
-                        .toString();
-
-                final isOwner =
-                    user != null &&
-                        user.uid ==
-                            commentUserId;
-
-                return Card(
-                  margin: EdgeInsets.zero,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.all(
-                      12,
-                    ),
-                    child: Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        _avatar(photoUrl),
-
-                        const SizedBox(
-                          width: 10,
-                        ),
-
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment
-                                    .start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      name,
-                                      style:
-                                          const TextStyle(
-                                        fontWeight:
-                                            FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-
-                                  if (isOwner)
-                                    PopupMenuButton<
-                                        String>(
-                                      padding:
-                                          EdgeInsets.zero,
-                                      onSelected:
-                                          (value) {
-                                        if (value ==
-                                            'delete') {
-                                          _deleteComment(
-                                            comment,
-                                          );
-                                        }
-                                      },
-                                      itemBuilder:
-                                          (
-                                        context,
-                                      ) {
-                                        return const [
-                                          PopupMenuItem(
-                                            value:
-                                                'delete',
-                                            child:
-                                                Row(
-                                              children: [
-                                                Icon(
-                                                  Icons
-                                                      .delete_outline,
-                                                ),
-                                                SizedBox(
-                                                  width:
-                                                      8,
-                                                ),
-                                                Text(
-                                                  'Delete',
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ];
-                                      },
-                                    ),
-                                ],
-                              ),
-
-                              const SizedBox(
-                                height: 4,
-                              ),
-
-                              Text(
-                                text,
-                                style:
-                                    const TextStyle(
-                                  fontSize: 15,
-                                  height: 1.35,
-                                ),
-                              ),
-
-                              const SizedBox(
-                                height: 5,
-                              ),
-
-                              Text(
-                                _formatDate(
-                                  data['createdAt'],
-                                ),
-                                style:
-                                    const TextStyle(
-                                  fontSize: 11,
-                                  color:
-                                      Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+            return Column(
+              children: comments
+                  .map(
+                    _buildComment,
+                  )
+                  .toList(),
             );
           },
+        ),
+
+        const SizedBox(
+          height: 8,
+        ),
+
+        Row(
+          crossAxisAlignment:
+              CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: TextField(
+                controller:
+                    _commentController,
+                minLines: 1,
+                maxLines: 4,
+                textInputAction:
+                    TextInputAction.newline,
+                enabled: !_isSending,
+                decoration:
+                    InputDecoration(
+                  hintText:
+                      'Write a comment...',
+                  border:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      14,
+                    ),
+                  ),
+                  contentPadding:
+                      const EdgeInsets
+                          .symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(
+              width: 8,
+            ),
+            SizedBox(
+              height: 52,
+              width: 52,
+              child: IconButton(
+                onPressed: _isSending
+                    ? null
+                    : _sendComment,
+                style: IconButton.styleFrom(
+                  backgroundColor:
+                      Theme.of(context)
+                          .colorScheme
+                          .primary,
+                  foregroundColor:
+                      Theme.of(context)
+                          .colorScheme
+                          .onPrimary,
+                ),
+                icon: _isSending
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.send_rounded,
+                      ),
+              ),
+            ),
+          ],
         ),
       ],
     );
