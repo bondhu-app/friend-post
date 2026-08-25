@@ -17,8 +17,7 @@ class CommentSection extends StatefulWidget {
       _CommentSectionState();
 }
 
-class _CommentSectionState
-    extends State<CommentSection> {
+class _CommentSectionState extends State<CommentSection> {
   final TextEditingController _commentController =
       TextEditingController();
 
@@ -50,10 +49,13 @@ class _CommentSectionState
       return;
     }
 
-    final text =
-        _commentController.text.trim();
+    final text = _commentController.text.trim();
 
-    if (text.isEmpty || _isSending) {
+    if (text.isEmpty) {
+      return;
+    }
+
+    if (_isSending) {
       return;
     }
 
@@ -75,29 +77,25 @@ class _CommentSectionState
       }
 
       final postData =
-          postSnapshot.data() ??
-              <String, dynamic>{};
+          postSnapshot.data() ?? <String, dynamic>{};
 
-      final postOwnerId = (
-        postData['uid'] ??
-        postData['userId'] ??
-        postData['ownerId'] ??
-        ''
-      ).toString();
+      final postOwnerId =
+          (postData['uid'] ??
+                  postData['userId'] ??
+                  postData['ownerId'] ??
+                  '')
+              .toString();
+
+      final userName =
+          user.displayName?.trim().isNotEmpty == true
+              ? user.displayName!.trim()
+              : 'Friend';
 
       final commentReference =
           _comments.doc();
 
-      final userName =
-          user.displayName?.trim().isNotEmpty ==
-                  true
-              ? user.displayName!.trim()
-              : 'Friend';
-
-      final commentData =
-          <String, dynamic>{
-        'commentId':
-            commentReference.id,
+      final commentData = <String, dynamic>{
+        'commentId': commentReference.id,
         'postId': widget.postId,
         'userId': user.uid,
         'uid': user.uid,
@@ -113,9 +111,7 @@ class _CommentSectionState
       };
 
       final currentCommentCount =
-          _toInt(
-        postData['commentCount'],
-      );
+          _toInt(postData['commentCount']);
 
       final batch =
           _firestore.batch();
@@ -139,36 +135,46 @@ class _CommentSectionState
 
       _commentController.clear();
 
-      // নিজের পোস্টে নিজে comment করলে
-      // notification পাঠানো হবে না।
+      // ----------------------------------------------------------
+      // COMMENT NOTIFICATION
+      // ----------------------------------------------------------
+      // নিজের পোস্টে নিজে কমেন্ট করলে notification যাবে না।
       if (postOwnerId.isNotEmpty &&
           postOwnerId != user.uid) {
-        await NotificationService.instance
-            .notifyComment(
-          receiverId: postOwnerId,
-          senderId: user.uid,
-          senderName: userName,
-          postId: widget.postId,
-          commentText: text,
-        );
+        try {
+          await NotificationService.instance
+              .notifyComment(
+            receiverId: postOwnerId,
+            senderId: user.uid,
+            senderName: userName,
+            commentText: text,
+          );
+        } catch (e) {
+          // Notification ব্যর্থ হলেও comment সফল থাকবে।
+          debugPrint(
+            'Comment notification error: $e',
+          );
+        }
       }
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage('Comment added.');
     } on FirebaseException catch (e) {
-      if (mounted) {
-        _showMessage(
-          e.message ??
-              'Could not add your comment.',
-        );
-      }
+      _showMessage(
+        e.message ??
+            'Could not add your comment.',
+      );
     } catch (e) {
       debugPrint(
-        'Send comment error: $e',
+        'Add comment error: $e',
       );
 
-      if (mounted) {
-        _showMessage(
-          'Could not add your comment. Please try again.',
-        );
-      }
+      _showMessage(
+        'Could not add your comment. Please try again.',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -202,11 +208,11 @@ class _CommentSectionState
           commentSnapshot.data() ??
               <String, dynamic>{};
 
-      final commentUserId = (
-        commentData['userId'] ??
-        commentData['uid'] ??
-        ''
-      ).toString();
+      final commentUserId =
+          (commentData['userId'] ??
+                  commentData['uid'] ??
+                  '')
+              .toString();
 
       if (commentUserId != user.uid) {
         _showMessage(
@@ -253,23 +259,25 @@ class _CommentSectionState
       }
 
       await batch.commit();
-    } on FirebaseException catch (e) {
-      if (mounted) {
-        _showMessage(
-          e.message ??
-              'Could not delete the comment.',
-        );
+
+      if (!mounted) {
+        return;
       }
+
+      _showMessage('Comment deleted.');
+    } on FirebaseException catch (e) {
+      _showMessage(
+        e.message ??
+            'Could not delete the comment.',
+      );
     } catch (e) {
       debugPrint(
         'Delete comment error: $e',
       );
 
-      if (mounted) {
-        _showMessage(
-          'Could not delete the comment.',
-        );
-      }
+      _showMessage(
+        'Could not delete the comment.',
+      );
     }
   }
 
@@ -281,6 +289,7 @@ class _CommentSectionState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -335,51 +344,49 @@ class _CommentSectionState
   }
 
   Widget _buildComment(
-    DocumentSnapshot<
-            Map<String, dynamic>>
+    DocumentSnapshot<Map<String, dynamic>>
         document,
   ) {
     final data =
         document.data() ??
             <String, dynamic>{};
 
-    final user =
+    final currentUser =
         _auth.currentUser;
 
-    final userId = (
-      data['userId'] ??
-      data['uid'] ??
-      ''
-    ).toString();
+    final userId =
+        (data['userId'] ??
+                data['uid'] ??
+                '')
+            .toString();
 
-    final userName = (
-      data['userName'] ??
-      data['name'] ??
-      'Friend'
-    ).toString();
+    final userName =
+        (data['userName'] ??
+                data['name'] ??
+                'Friend')
+            .toString();
 
-    final photoUrl = (
-      data['userPhotoUrl'] ??
-      data['photoUrl'] ??
-      ''
-    ).toString();
+    final photoUrl =
+        (data['userPhotoUrl'] ??
+                data['photoUrl'] ??
+                '')
+            .toString();
 
-    final text = (
-      data['text'] ??
-      data['content'] ??
-      ''
-    ).toString();
+    final text =
+        (data['text'] ??
+                data['content'] ??
+                '')
+            .toString();
 
     final createdAt =
         data['createdAt'];
 
     final canDelete =
-        user != null &&
-            user.uid == userId;
+        currentUser != null &&
+            currentUser.uid == userId;
 
     return Padding(
-      padding:
-          const EdgeInsets.only(
+      padding: const EdgeInsets.only(
         bottom: 14,
       ),
       child: Row(
@@ -402,9 +409,7 @@ class _CommentSectionState
                     .colorScheme
                     .surfaceContainerHighest,
                 borderRadius:
-                    BorderRadius.circular(
-                  14,
-                ),
+                    BorderRadius.circular(14),
               ),
               child: Column(
                 crossAxisAlignment:
@@ -444,8 +449,20 @@ class _CommentSectionState
                                   String>(
                                 value:
                                     'delete',
-                                child: Text(
-                                  'Delete',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons
+                                          .delete_outline,
+                                      size: 20,
+                                    ),
+                                    SizedBox(
+                                      width: 8,
+                                    ),
+                                    Text(
+                                      'Delete',
+                                    ),
+                                  ],
                                 ),
                               ),
                             ];
@@ -539,6 +556,11 @@ class _CommentSectionState
             snapshot,
           ) {
             if (snapshot.hasError) {
+              debugPrint(
+                'Comments stream error: '
+                '${snapshot.error}',
+              );
+
               return const Padding(
                 padding:
                     EdgeInsets.symmetric(
