@@ -53,11 +53,7 @@ class _CommentSectionState
     final text =
         _commentController.text.trim();
 
-    if (text.isEmpty) {
-      return;
-    }
-
-    if (_isSending) {
+    if (text.isEmpty || _isSending) {
       return;
     }
 
@@ -79,14 +75,15 @@ class _CommentSectionState
       }
 
       final postData =
-          postSnapshot.data() ?? {};
+          postSnapshot.data() ??
+              <String, dynamic>{};
 
-      final postOwnerId =
-          (postData['uid'] ??
-                  postData['userId'] ??
-                  postData['ownerId'] ??
-                  '')
-              .toString();
+      final postOwnerId = (
+        postData['uid'] ??
+        postData['userId'] ??
+        postData['ownerId'] ??
+        ''
+      ).toString();
 
       final commentReference =
           _comments.doc();
@@ -97,8 +94,10 @@ class _CommentSectionState
               ? user.displayName!.trim()
               : 'Friend';
 
-      final commentData = {
-        'commentId': commentReference.id,
+      final commentData =
+          <String, dynamic>{
+        'commentId':
+            commentReference.id,
         'postId': widget.postId,
         'userId': user.uid,
         'uid': user.uid,
@@ -140,24 +139,36 @@ class _CommentSectionState
 
       _commentController.clear();
 
+      // নিজের পোস্টে নিজে comment করলে
+      // notification পাঠানো হবে না।
       if (postOwnerId.isNotEmpty &&
           postOwnerId != user.uid) {
         await NotificationService.instance
             .notifyComment(
-          postOwnerId: postOwnerId,
+          receiverId: postOwnerId,
+          senderId: user.uid,
+          senderName: userName,
           postId: widget.postId,
-          commentId: commentReference.id,
+          commentText: text,
         );
       }
     } on FirebaseException catch (e) {
-      _showMessage(
-        e.message ??
-            'Could not add your comment.',
+      if (mounted) {
+        _showMessage(
+          e.message ??
+              'Could not add your comment.',
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'Send comment error: $e',
       );
-    } catch (_) {
-      _showMessage(
-        'Could not add your comment. Please try again.',
-      );
+
+      if (mounted) {
+        _showMessage(
+          'Could not add your comment. Please try again.',
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -188,13 +199,14 @@ class _CommentSectionState
       }
 
       final commentData =
-          commentSnapshot.data() ?? {};
+          commentSnapshot.data() ??
+              <String, dynamic>{};
 
-      final commentUserId =
-          (commentData['userId'] ??
-                  commentData['uid'] ??
-                  '')
-              .toString();
+      final commentUserId = (
+        commentData['userId'] ??
+        commentData['uid'] ??
+        ''
+      ).toString();
 
       if (commentUserId != user.uid) {
         _showMessage(
@@ -211,7 +223,8 @@ class _CommentSectionState
           await postReference.get();
 
       final postData =
-          postSnapshot.data() ?? {};
+          postSnapshot.data() ??
+              <String, dynamic>{};
 
       final currentCommentCount =
           _toInt(
@@ -241,14 +254,22 @@ class _CommentSectionState
 
       await batch.commit();
     } on FirebaseException catch (e) {
-      _showMessage(
-        e.message ??
-            'Could not delete the comment.',
+      if (mounted) {
+        _showMessage(
+          e.message ??
+              'Could not delete the comment.',
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'Delete comment error: $e',
       );
-    } catch (_) {
-      _showMessage(
-        'Could not delete the comment.',
-      );
+
+      if (mounted) {
+        _showMessage(
+          'Could not delete the comment.',
+        );
+      }
     }
   }
 
@@ -257,8 +278,7 @@ class _CommentSectionState
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
       ),
@@ -320,33 +340,35 @@ class _CommentSectionState
         document,
   ) {
     final data =
-        document.data() ?? {};
+        document.data() ??
+            <String, dynamic>{};
 
-    final user = _auth.currentUser;
+    final user =
+        _auth.currentUser;
 
-    final userId =
-        (data['userId'] ??
-                data['uid'] ??
-                '')
-            .toString();
+    final userId = (
+      data['userId'] ??
+      data['uid'] ??
+      ''
+    ).toString();
 
-    final userName =
-        (data['userName'] ??
-                data['name'] ??
-                'Friend')
-            .toString();
+    final userName = (
+      data['userName'] ??
+      data['name'] ??
+      'Friend'
+    ).toString();
 
-    final photoUrl =
-        (data['userPhotoUrl'] ??
-                data['photoUrl'] ??
-                '')
-            .toString();
+    final photoUrl = (
+      data['userPhotoUrl'] ??
+      data['photoUrl'] ??
+      ''
+    ).toString();
 
-    final text =
-        (data['text'] ??
-                data['content'] ??
-                '')
-            .toString();
+    final text = (
+      data['text'] ??
+      data['content'] ??
+      ''
+    ).toString();
 
     final createdAt =
         data['createdAt'];
@@ -365,9 +387,11 @@ class _CommentSectionState
             CrossAxisAlignment.start,
         children: [
           _buildAvatar(photoUrl),
+
           const SizedBox(
             width: 10,
           ),
+
           Expanded(
             child: Container(
               padding:
@@ -398,6 +422,7 @@ class _CommentSectionState
                           ),
                         ),
                       ),
+
                       if (canDelete)
                         PopupMenuButton<String>(
                           padding:
@@ -428,9 +453,11 @@ class _CommentSectionState
                         ),
                     ],
                   ),
+
                   const SizedBox(
                     height: 4,
                   ),
+
                   Text(
                     text,
                     style:
@@ -439,9 +466,11 @@ class _CommentSectionState
                       height: 1.35,
                     ),
                   ),
+
                   const SizedBox(
                     height: 6,
                   ),
+
                   Text(
                     _formatDate(
                       createdAt,
@@ -599,9 +628,11 @@ class _CommentSectionState
                 ),
               ),
             ),
+
             const SizedBox(
               width: 8,
             ),
+
             SizedBox(
               height: 52,
               width: 52,
@@ -609,7 +640,8 @@ class _CommentSectionState
                 onPressed: _isSending
                     ? null
                     : _sendComment,
-                style: IconButton.styleFrom(
+                style:
+                    IconButton.styleFrom(
                   backgroundColor:
                       Theme.of(context)
                           .colorScheme
