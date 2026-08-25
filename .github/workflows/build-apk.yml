@@ -33,6 +33,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       # ============================================================
       # FLUTTER
@@ -45,26 +46,37 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Check Flutter, Dart and Java
+      # ============================================================
+      # CHECK ENVIRONMENT
+      # ============================================================
+
+      - name: Check Flutter and Java
+        shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "FLUTTER"
+          echo "ENVIRONMENT"
           echo "========================================"
+
+          echo ""
+          echo "Flutter:"
           flutter --version
 
           echo ""
-          echo "========================================"
-          echo "DART"
-          echo "========================================"
-          dart --version
+          echo "Java:"
+          java -version
 
           echo ""
-          echo "========================================"
-          echo "JAVA"
-          echo "========================================"
-          java -version
+          echo "JAVA_HOME:"
+          echo "$JAVA_HOME"
+
+      # ============================================================
+      # GET DEPENDENCIES
+      # ============================================================
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
 
       # ============================================================
       # BACKUP FIREBASE
@@ -76,41 +88,50 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "BACKING UP FIREBASE CONFIGURATION"
+          echo "BACKING UP FIREBASE"
           echo "========================================"
 
           if [ ! -f "android/app/google-services.json" ]; then
-            echo "ERROR: android/app/google-services.json not found."
+            echo "ERROR:"
+            echo "android/app/google-services.json was not found."
             exit 1
           fi
 
-          cp android/app/google-services.json /tmp/google-services.json
+          cp \
+            android/app/google-services.json \
+            /tmp/google-services.json
 
           echo "Firebase configuration backed up."
 
       # ============================================================
-      # GET DEPENDENCIES
+      # REMOVE OLD ANDROID
       # ============================================================
 
-      - name: Get Flutter dependencies
-        run: |
-          set -e
-          flutter pub get
-
-      # ============================================================
-      # REBUILD ANDROID PROJECT
-      # ============================================================
-
-      - name: Rebuild Android project
+      - name: Remove old Android project
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "REBUILDING ANDROID PROJECT"
+          echo "REMOVING OLD ANDROID PROJECT"
           echo "========================================"
 
           rm -rf android
+
+          echo "Old Android project removed."
+
+      # ============================================================
+      # CREATE FRESH FLUTTER ANDROID PROJECT
+      # ============================================================
+
+      - name: Create fresh Flutter Android project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CREATING FRESH ANDROID PROJECT"
+          echo "========================================"
 
           flutter create \
             --platforms=android \
@@ -119,41 +140,43 @@ jobs:
             --android-language kotlin \
             .
 
-          mkdir -p android/app
-
-          cp /tmp/google-services.json \
-            android/app/google-services.json
-
-          rm -rf test
-
-          echo ""
           echo "Fresh Flutter Android project created."
 
       # ============================================================
-      # CONFIGURE ANDROID SETTINGS
+      # RESTORE FIREBASE
       # ============================================================
 
-      - name: Configure Android plugins
+      - name: Restore Firebase configuration
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "CONFIGURING ANDROID PLUGINS"
+          echo "RESTORING FIREBASE"
           echo "========================================"
 
-          SETTINGS="android/settings.gradle.kts"
-          APP="android/app/build.gradle.kts"
+          mkdir -p android/app
 
-          if [ ! -f "$SETTINGS" ]; then
-            echo "ERROR: $SETTINGS not found."
-            exit 1
-          fi
+          cp \
+            /tmp/google-services.json \
+            android/app/google-services.json
 
-          if [ ! -f "$APP" ]; then
-            echo "ERROR: $APP not found."
-            exit 1
-          fi
+          test -f android/app/google-services.json
+
+          echo "Firebase configuration restored."
+
+      # ============================================================
+      # CONFIGURE ANDROID
+      # ============================================================
+
+      - name: Configure Android project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING ANDROID"
+          echo "========================================"
 
           python3 <<'PY'
           from pathlib import Path
@@ -162,585 +185,78 @@ jobs:
           settings_path = Path("android/settings.gradle.kts")
           app_path = Path("android/app/build.gradle.kts")
 
+          if not settings_path.exists():
+              raise SystemExit(
+                  "ERROR: android/settings.gradle.kts not found."
+              )
+
+          if not app_path.exists():
+              raise SystemExit(
+                  "ERROR: android/app/build.gradle.kts not found."
+              )
+
           settings = settings_path.read_text()
           app = app_path.read_text()
+
+          # ==========================================================
+          # VERSIONS
+          # ==========================================================
 
           KOTLIN_VERSION = "2.3.0"
           AGP_VERSION = "8.9.1"
           GOOGLE_SERVICES_VERSION = "4.4.3"
 
-          # ========================================================
+          # ==========================================================
           # SETTINGS.GRADLE.KTS
-          # ========================================================
+          # ==========================================================
 
-          # Kotlin plugin
-          kotlin_pattern = re.compile(
-              r'id\(\s*["\']org\.jetbrains\.kotlin\.android["\']\s*\)'
+          # Remove existing Kotlin plugin declaration.
+          settings = re.sub(
+              r'^\s*id\s*["\']org\.jetbrains\.kotlin\.android["\']\s*'
               r'\s+version\s+["\'][^"\']+["\']'
-              r'\s+apply\s+false'
+              r'\s+apply\s+false\s*$',
+              '',
+              settings,
+              flags=re.MULTILINE,
           )
 
-          kotlin_line = (
-              '    id("org.jetbrains.kotlin.android") '
-              f'version "{KOTLIN_VERSION}" apply false'
-          )
-
-          if kotlin_pattern.search(settings):
-              settings = kotlin_pattern.sub(
-                  kotlin_line,
-                  settings,
-                  count=1
-              )
-          else:
-              if "plugins {" not in settings:
-                  raise SystemExit(
-                      "ERROR: plugins block not found."
-                  )
-
-              settings = settings.replace(
-                  "plugins {",
-                  "plugins {\n" + kotlin_line,
-                  1
-              )
-
-          # Android Gradle Plugin
-          agp_pattern = re.compile(
-              r'id\(\s*["\']com\.android\.application["\']\s*\)'
+          # Remove existing Android application plugin declaration.
+          settings = re.sub(
+              r'^\s*id\s*["\']com\.android\.application["\']\s*'
               r'\s+version\s+["\'][^"\']+["\']'
-              r'\s+apply\s+false'
+              r'\s+apply\s+false\s*$',
+              '',
+              settings,
+              flags=re.MULTILINE,
           )
 
-          agp_line = (
-              '    id("com.android.application") '
-              f'version "{AGP_VERSION}" apply false'
-          )
-
-          if agp_pattern.search(settings):
-              settings = agp_pattern.sub(
-                  agp_line,
-                  settings,
-                  count=1
-              )
-          else:
-              if "plugins {" not in settings:
-                  raise SystemExit(
-                      "ERROR: plugins block not found for AGP."
-                  )
-
-              settings = settings.replace(
-                  "plugins {",
-                  "plugins {\n" + agp_line,
-                  1
-              )
-
-          # Google Services
-          google_pattern = re.compile(
-              r'id\(\s*["\']com\.google\.gms\.google-services["\']\s*\)'
+          # Remove existing Google Services plugin declaration.
+          settings = re.sub(
+              r'^\s*id\s*["\']com\.google\.gms\.google-services["\']\s*'
               r'\s+version\s+["\'][^"\']+["\']'
-              r'\s+apply\s+false'
+              r'\s+apply\s+false\s*$',
+              '',
+              settings,
+              flags=re.MULTILINE,
           )
 
-          google_line = (
-              '    id("com.google.gms.google-services") '
-              f'version "{GOOGLE_SERVICES_VERSION}" apply false'
+          # Find plugins block.
+          plugins_match = re.search(
+              r'plugins\s*\{',
+              settings,
           )
 
-          if google_pattern.search(settings):
-              settings = google_pattern.sub(
-                  google_line,
-                  settings,
-                  count=1
-              )
-          else:
-              settings = settings.replace(
-                  "plugins {",
-                  "plugins {\n" + google_line,
-                  1
+          if not plugins_match:
+              raise SystemExit(
+                  "ERROR: plugins block not found in settings.gradle.kts."
               )
 
-          settings_path.write_text(settings)
-
-          # ========================================================
-          # APP/BUILD.GRADLE.KTS
-          # ========================================================
-
-          # Application ID
-          app = re.sub(
-              r'applicationId\s*=\s*["\'][^"\']+["\']',
-              'applicationId = "com.friendpost.app"',
-              app,
-              count=1
-          )
-
-          # Google Services plugin
-          if 'id("com.google.gms.google-services")' not in app:
-              if "plugins {" not in app:
-                  raise SystemExit(
-                      "ERROR: App plugins block not found."
-                  )
-
-              app = app.replace(
-                  "plugins {",
-                  "plugins {\n"
-                  '    id("com.google.gms.google-services")',
-                  1
-              )
-
-          app_path.write_text(app)
-
-          print("")
-          print("========================================")
-          print("ANDROID PLUGINS CONFIGURED")
-          print("========================================")
-          print(f"Kotlin          : {KOTLIN_VERSION}")
-          print(f"Android Gradle  : {AGP_VERSION}")
-          print(f"Google Services : {GOOGLE_SERVICES_VERSION}")
-          print("Application ID  : com.friendpost.app")
-          print("========================================")
-          PY
-
-      # ============================================================
-      # FIX KOTLIN 2.3 COMPILER OPTIONS
-      # ============================================================
-
-      - name: Configure Kotlin 2.3 compilerOptions
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CONFIGURING KOTLIN 2.3 COMPILER OPTIONS"
-          echo "========================================"
-
-          APP="android/app/build.gradle.kts"
-
-          if [ ! -f "$APP" ]; then
-            echo "ERROR: $APP not found."
-            exit 1
-          fi
-
-          python3 <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("android/app/build.gradle.kts")
-          text = path.read_text()
-
-          # ========================================================
-          # REMOVE OLD kotlinOptions BLOCK
-          #
-          # This fixes:
-          #
-          # Using 'jvmTarget: String' is an error.
-          # Please migrate to the compilerOptions DSL.
-          # ========================================================
-
-          old_block = re.compile(
-              r'\n\s*kotlinOptions\s*\{'
-              r'\s*jvmTarget\s*=\s*JavaVersion\.VERSION_\d+\.toString\(\)'
-              r'\s*\}',
-              re.MULTILINE
-          )
-
-          text, removed = old_block.subn("", text)
-
-          print(f"Old kotlinOptions blocks removed: {removed}")
-
-          # Also remove other old-style Kotlin jvmTarget assignments
-          old_target = re.compile(
-              r'\n\s*jvmTarget\s*=\s*["\'][^"\']+["\']'
-              r'\s*',
-              re.MULTILINE
-          )
-
-          text, removed_target = old_target.subn("", text)
-
-          print(
-              "Old jvmTarget assignments removed:",
-              removed_target
-          )
-
-          # ========================================================
-          # REMOVE OLD compilerOptions BLOCK IF ONE EXISTS
-          # ========================================================
-
-          old_compiler = re.compile(
-              r'\n\s*kotlin\s*\{\s*'
-              r'compilerOptions\s*\{.*?\}\s*'
-              r'\}',
-              re.DOTALL
-          )
-
-          text, old_compiler_count = old_compiler.subn("", text)
-
-          print(
-              "Existing compilerOptions blocks removed:",
-              old_compiler_count
-          )
-
-          # ========================================================
-          # ADD KOTLIN 2.3 COMPILER OPTIONS
-          # ========================================================
-
-          compiler_block = """
-          
-          kotlin {
-              compilerOptions {
-                  jvmTarget.set(
-                      org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-                  )
-              }
-          }
-          """
-
-          # Add the compilerOptions block at the end.
-          text = text.rstrip() + "\n" + compiler_block.strip() + "\n"
-
-          path.write_text(text)
-
-          print("")
-          print("Kotlin compilerOptions configured.")
-          print("JVM target: JVM_17")
-          PY
-
-          echo ""
-          echo "========================================"
-          echo "FINAL app/build.gradle.kts"
-          echo "========================================"
-
-          cat android/app/build.gradle.kts
-
-      # ============================================================
-      # VERIFY KOTLIN
-      # ============================================================
-
-      - name: Verify Kotlin configuration
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING KOTLIN CONFIGURATION"
-          echo "========================================"
-
-          echo ""
-          echo "Kotlin plugin:"
-          grep -n \
-            "org.jetbrains.kotlin.android" \
-            android/settings.gradle.kts
-
-          echo ""
-          echo "Kotlin compilerOptions:"
-          grep -n -A8 -B2 \
-            "compilerOptions" \
-            android/app/build.gradle.kts
-
-          echo ""
-
-          grep -q \
-            'id("org.jetbrains.kotlin.android") version "2.3.0" apply false' \
-            android/settings.gradle.kts
-
-          grep -q \
-            "compilerOptions" \
-            android/app/build.gradle.kts
-
-          grep -q \
-            "JvmTarget.JVM_17" \
-            android/app/build.gradle.kts
-
-          if grep -q \
-            "jvmTarget = JavaVersion.VERSION_11.toString()" \
-            android/app/build.gradle.kts; then
-
-            echo "ERROR: Old jvmTarget configuration still exists."
-            exit 1
-          fi
-
-          echo ""
-          echo "SUCCESS: Kotlin 2.3 compilerOptions configured."
-          echo "SUCCESS: JVM target is 17."
-          echo "SUCCESS: Old Kotlin DSL removed."
-
-      # ============================================================
-      # VERIFY ANDROID PLUGINS
-      # ============================================================
-
-      - name: Verify Android plugins
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING ANDROID PLUGINS"
-          echo "========================================"
-
-          echo ""
-          echo "Android Gradle Plugin:"
-          grep -n \
-            "com.android.application" \
-            android/settings.gradle.kts
-
-          echo ""
-          echo "Google Services:"
-          grep -n \
-            "google.gms.google-services" \
-            android/settings.gradle.kts
-
-          echo ""
-          echo "App Google Services:"
-          grep -n \
-            "google.gms.google-services" \
-            android/app/build.gradle.kts
-
-          echo ""
-          echo "SUCCESS: Android plugins verified."
-
-      # ============================================================
-      # VERIFY FIREBASE PACKAGE
-      # ============================================================
-
-      - name: Verify Firebase configuration
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING FIREBASE CONFIGURATION"
-          echo "========================================"
-
-          echo ""
-          echo "Android application ID:"
-          grep -n \
-            "applicationId" \
-            android/app/build.gradle.kts
-
-          echo ""
-          echo "Firebase package:"
-          grep -n \
-            '"package_name"' \
-            android/app/google-services.json
-
-          echo ""
-
-          grep -q \
-            'applicationId = "com.friendpost.app"' \
-            android/app/build.gradle.kts
-
-          grep -q \
-            '"package_name": "com.friendpost.app"' \
-            android/app/google-services.json
-
-          echo ""
-          echo "SUCCESS: Android and Firebase package names match."
-
-      # ============================================================
-      # VERIFY GRADLE
-      # ============================================================
-
-      - name: Verify Gradle project
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING GRADLE PROJECT"
-          echo "========================================"
-
-          test -f android/gradlew
-          test -f android/settings.gradle.kts
-          test -f android/build.gradle.kts
-          test -f android/app/build.gradle.kts
-          test -f android/gradle/wrapper/gradle-wrapper.properties
-
-          echo ""
-          echo "Gradle wrapper:"
-          grep \
-            "distributionUrl" \
-            android/gradle/wrapper/gradle-wrapper.properties
-
-          echo ""
-          echo "SUCCESS: Gradle project verified."
-
-      # ============================================================
-      # CHECK ANDROID V1
-      # ============================================================
-
-      - name: Check Android V1 embedding
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CHECKING ANDROID V1 EMBEDDING"
-          echo "========================================"
-
-          if grep -RInE \
-            --exclude-dir=.git \
-            --exclude-dir=build \
-            --exclude-dir=.gradle \
-            --exclude-dir=.dart_tool \
-            "io\.flutter\.app\.FlutterActivity|io\.flutter\.app\.FlutterApplication|PluginRegistry\.Registrar|FlutterActivityDelegate|FlutterView" \
-            android; then
-
-            echo ""
-            echo "ERROR: Legacy Android V1 embedding found."
-            exit 1
-          fi
-
-          echo ""
-          echo "SUCCESS: No Android V1 embedding found."
-
-      # ============================================================
-      # VERIFY ANDROID PROJECT
-      # ============================================================
-
-      - name: Verify Android project
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING ANDROID PROJECT"
-          echo "========================================"
-
-          test -f android/app/src/main/AndroidManifest.xml
-          test -f android/app/google-services.json
-
-          echo ""
-          echo "SUCCESS: Android project verification passed."
-
-      # ============================================================
-      # FLUTTER ANALYZE
-      # ============================================================
-
-      - name: Analyze project
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "RUNNING FLUTTER ANALYZE"
-          echo "========================================"
-
-          flutter analyze
-
-      # ============================================================
-      # CLEAN
-      # ============================================================
-
-      - name: Clean Flutter build
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CLEANING FLUTTER BUILD"
-          echo "========================================"
-
-          flutter clean
-          flutter pub get
-
-      # ============================================================
-      # CHECK FINAL KOTLIN CONFIGURATION
-      # ============================================================
-
-      - name: Final Kotlin configuration check
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "FINAL KOTLIN CONFIGURATION CHECK"
-          echo "========================================"
-
-          echo ""
-          echo "Kotlin plugin:"
-          grep \
-            "org.jetbrains.kotlin.android" \
-            android/settings.gradle.kts
-
-          echo ""
-          echo "Compiler options:"
-          grep -n -A8 -B2 \
-            "compilerOptions" \
-            android/app/build.gradle.kts
-
-          echo ""
-
-          if ! grep -q \
-            'version "2.3.0" apply false' \
-            android/settings.gradle.kts; then
-
-            echo "ERROR: Kotlin 2.3.0 is not active."
-            exit 1
-          fi
-
-          if ! grep -q \
-            "JvmTarget.JVM_17" \
-            android/app/build.gradle.kts; then
-
-            echo "ERROR: JVM_17 compiler target not configured."
-            exit 1
-          fi
-
-          if grep -q \
-            "jvmTarget = JavaVersion.VERSION_11.toString()" \
-            android/app/build.gradle.kts; then
-
-            echo "ERROR: Old jvmTarget configuration detected."
-            exit 1
-          fi
-
-          echo ""
-          echo "SUCCESS: Final Kotlin configuration is correct."
-
-      # ============================================================
-      # BUILD RELEASE APK
-      # ============================================================
-
-      - name: Build release APK
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "BUILDING RELEASE APK"
-          echo "========================================"
-
-          flutter build apk --release
-
-      # ============================================================
-      # VERIFY APK
-      # ============================================================
-
-      - name: Verify APK
-        shell: bash
-        run: |
-          set -e
-
-          APK="build/app/outputs/flutter-apk/app-release.apk"
-
-          echo "========================================"
-          echo "VERIFYING APK"
-          echo "========================================"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not created."
-            exit 1
-          fi
-
-          echo ""
-          echo "========================================"
-          echo "APK BUILD SUCCESS"
-          echo "========================================"
-
-          ls -lh "$APK"
-
-      # ============================================================
-      # UPLOAD APK
-      # ============================================================
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: friend-post-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
+          plugins_start = plugins_match.end()
+
+          plugin_lines = f'''
+              id("com.android.application") version "{AGP_VERSION}" apply false
+              id("org.jetbrains.kotlin.android") version "{KOTLIN_VERSION}" apply false
+              id("com.google.gms.google-services") version "{GOOGLE_SERVICES_VERSION}" apply false
+          '''
+
+          settings =
