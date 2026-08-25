@@ -6,216 +6,98 @@ class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() =>
-      _ProfileScreenState();
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState
-    extends State<ProfileScreen> {
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
+class _ProfileScreenState extends State<ProfileScreen> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  bool _isEditing = false;
+  bool _isSaving = false;
 
-  bool _isLoading = true;
-
-  String _name = 'Friend';
-  String _email = '';
-  String _bio = '';
-  String _phone = '';
-  String _location = '';
-  String _website = '';
-  String _photoUrl = '';
-  String _coverPhotoUrl = '';
+  late TextEditingController _nameController;
+  late TextEditingController _bioController;
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
+    _nameController = TextEditingController();
+    _bioController = TextEditingController();
   }
 
-  Future<void> _loadProfile() async {
-    final user = _auth.currentUser;
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _bioController.dispose();
+    super.dispose();
+  }
 
-    if (user == null) {
-      if (!mounted) return;
+  DocumentReference<Map<String, dynamic>> _userReference(
+    String uid,
+  ) {
+    return _firestore.collection('users').doc(uid);
+  }
 
-      setState(() {
-        _isLoading = false;
-      });
-
+  Future<void> _saveProfile(
+    String uid,
+    Map<String, dynamic> currentData,
+  ) async {
+    if (_isSaving) {
       return;
     }
 
-    try {
-      final doc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .get();
+    final name = _nameController.text.trim();
+    final bio = _bioController.text.trim();
 
-      final data = doc.data();
-
-      if (!mounted) return;
-
-      setState(() {
-        _name = (data?['name'] ??
-                user.displayName ??
-                'Friend')
-            .toString();
-
-        _email =
-            (data?['email'] ??
-                    user.email ??
-                    '')
-                .toString();
-
-        _bio =
-            (data?['bio'] ?? '').toString();
-
-        _phone =
-            (data?['phone'] ?? '').toString();
-
-        _location =
-            (data?['location'] ?? '')
-                .toString();
-
-        _website =
-            (data?['website'] ?? '')
-                .toString();
-
-        _photoUrl =
-            (data?['photoUrl'] ?? '')
-                .toString();
-
-        _coverPhotoUrl =
-            (data?['coverPhotoUrl'] ?? '')
-                .toString();
-
-        _isLoading = false;
-      });
-    } catch (e) {
-      debugPrint(
-        'Profile loading error: $e',
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not load profile: $e',
-          ),
-        ),
-      );
+    if (name.isEmpty) {
+      _showMessage('Name cannot be empty.');
+      return;
     }
-  }
 
-  Future<void> _editProfile() async {
-    final nameController =
-        TextEditingController(text: _name);
+    setState(() {
+      _isSaving = true;
+    });
 
-    final bioController =
-        TextEditingController(text: _bio);
-
-    final phoneController =
-        TextEditingController(text: _phone);
-
-    final locationController =
-        TextEditingController(text: _location);
-
-    final websiteController =
-        TextEditingController(text: _website);
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return _EditProfileDialog(
-          nameController: nameController,
-          bioController: bioController,
-          phoneController: phoneController,
-          locationController: locationController,
-          websiteController: websiteController,
-          onSave: () async {
-            final name =
-                nameController.text.trim();
-
-            final user = _auth.currentUser;
-
-            if (user == null ||
-                name.isEmpty) {
-              return false;
-            }
-
-            try {
-              await _firestore
-                  .collection('users')
-                  .doc(user.uid)
-                  .set(
-                {
-                  'name': name,
-                  'email':
-                      user.email ?? _email,
-                  'bio':
-                      bioController.text.trim(),
-                  'phone':
-                      phoneController.text.trim(),
-                  'location':
-                      locationController.text
-                          .trim(),
-                  'website':
-                      websiteController.text
-                          .trim(),
-                  'updatedAt':
-                      FieldValue.serverTimestamp(),
-                },
-                SetOptions(merge: true),
-              );
-
-              await user.updateDisplayName(name);
-
-              return true;
-            } catch (e) {
-              debugPrint(
-                'Profile update error: $e',
-              );
-
-              return false;
-            }
-          },
-        );
-      },
-    );
-
-    nameController.dispose();
-    bioController.dispose();
-    phoneController.dispose();
-    locationController.dispose();
-    websiteController.dispose();
-
-    if (!mounted) return;
-
-    if (result == true) {
-      await _loadProfile();
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Profile updated successfully.',
-          ),
-        ),
+    try {
+      await _userReference(uid).set(
+        {
+          'uid': uid,
+          'name': name,
+          'bio': bio,
+          'email': _auth.currentUser?.email ?? '',
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
       );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isEditing = false;
+      });
+
+      _showMessage('Profile updated successfully.');
+    } on FirebaseException catch (e) {
+      _showMessage(
+        e.message ?? 'Could not update profile.',
+      );
+    } catch (e) {
+      debugPrint('Profile update error: $e');
+      _showMessage('Could not update profile.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
   Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
@@ -226,15 +108,13 @@ class _ProfileScreenState
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext)
-                    .pop(false);
+                Navigator.of(dialogContext).pop(false);
               },
               child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.of(dialogContext)
-                    .pop(true);
+                Navigator.of(dialogContext).pop(true);
               },
               child: const Text('Logout'),
             ),
@@ -243,60 +123,449 @@ class _ProfileScreenState
       },
     );
 
-    if (confirm != true) return;
-
-    await _auth.signOut();
-
-    if (!mounted) return;
-
-    Navigator.of(context)
-        .pushNamedAndRemoveUntil(
-      '/',
-      (route) => false,
-    );
-  }
-
-  Widget _profileAvatar() {
-    if (_photoUrl.isNotEmpty) {
-      return CircleAvatar(
-        radius: 55,
-        backgroundImage:
-            NetworkImage(_photoUrl),
-      );
+    if (confirmed != true) {
+      return;
     }
 
-    return const CircleAvatar(
-      radius: 55,
-      child: Icon(
-        Icons.person,
-        size: 60,
+    try {
+      await _auth.signOut();
+    } on FirebaseException catch (e) {
+      _showMessage(
+        e.message ?? 'Could not logout.',
+      );
+    } catch (e) {
+      debugPrint('Logout error: $e');
+      _showMessage('Could not logout.');
+    }
+  }
+
+  void _startEditing(
+    Map<String, dynamic> data,
+    User user,
+  ) {
+    final name = (data['name'] ?? '').toString();
+    final bio = (data['bio'] ?? '').toString();
+
+    _nameController.text =
+        name.isNotEmpty ? name : (user.displayName ?? 'Friend');
+
+    _bioController.text = bio;
+
+    setState(() {
+      _isEditing = true;
+    });
+  }
+
+  void _cancelEditing() {
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isEditing = false;
+    });
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  Widget _infoTile({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
-    if (value.trim().isEmpty) {
-      return const SizedBox.shrink();
+  Widget _buildAvatar(
+    String photoUrl,
+    String name,
+  ) {
+    if (photoUrl.trim().isNotEmpty) {
+      return CircleAvatar(
+        radius: 55,
+        backgroundImage: NetworkImage(photoUrl),
+      );
     }
 
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: Text(value),
+    final firstLetter = name.trim().isNotEmpty
+        ? name.trim()[0].toUpperCase()
+        : 'F';
+
+    return CircleAvatar(
+      radius: 55,
+      child: Text(
+        firstLetter,
+        style: const TextStyle(
+          fontSize: 42,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
+  }
+
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+  ) {
+    return Expanded(
+      child: Card(
+        elevation: 0,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: 18,
+            horizontal: 8,
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 28,
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileContent(
+    String uid,
+    User user,
+    Map<String, dynamic> data,
+  ) {
+    final name =
+        (data['name'] ?? user.displayName ?? 'Friend')
+            .toString();
+
+    final email =
+        (data['email'] ?? user.email ?? '')
+            .toString();
+
+    final bio =
+        (data['bio'] ?? '')
+            .toString();
+
+    final photoUrl =
+        (data['photoUrl'] ?? user.photoURL ?? '')
+            .toString();
+
+    final postCount =
+        _toInt(data['postCount']);
+
+    final friendCount =
+        _toInt(data['friendCount']);
+
+    final followerCount =
+        _toInt(data['followerCount']);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const SizedBox(height: 12),
+
+        Center(
+          child: _buildAvatar(
+            photoUrl,
+            name,
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        Center(
+          child: Text(
+            name,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+
+        if (email.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Center(
+            child: Text(
+              email,
+              style: const TextStyle(
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ],
+
+        if (bio.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              bio,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+              ),
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 20),
+
+        Row(
+          children: [
+            _buildStatCard(
+              'Posts',
+              postCount.toString(),
+              Icons.article_outlined,
+            ),
+            _buildStatCard(
+              'Friends',
+              friendCount.toString(),
+              Icons.people_outline,
+            ),
+            _buildStatCard(
+              'Followers',
+              followerCount.toString(),
+              Icons.person_add_alt_1_outlined,
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        if (_isEditing)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Edit Profile',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  TextField(
+                    controller: _nameController,
+                    textCapitalization:
+                        TextCapitalization.words,
+                    decoration: InputDecoration(
+                      labelText: 'Name',
+                      prefixIcon: const Icon(
+                        Icons.person_outline,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  TextField(
+                    controller: _bioController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: 'Bio',
+                      hintText:
+                          'Tell something about yourself...',
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.only(
+                          bottom: 65,
+                        ),
+                        child: Icon(
+                          Icons.info_outline,
+                        ),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _isSaving
+                              ? null
+                              : _cancelEditing,
+                          child:
+                              const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _isSaving
+                              ? null
+                              : () {
+                                  _saveProfile(
+                                    uid,
+                                    data,
+                                  );
+                                },
+                          child: _isSaving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'Save',
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.edit_outlined,
+              ),
+              title: const Text(
+                'Edit Profile',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              subtitle: const Text(
+                'Update your name and bio',
+              ),
+              trailing: const Icon(
+                Icons.chevron_right,
+              ),
+              onTap: () {
+                _startEditing(
+                  data,
+                  user,
+                );
+              },
+            ),
+          ),
+
+        const SizedBox(height: 10),
+
+        Card(
+          child: ListTile(
+            leading: const Icon(
+              Icons.email_outlined,
+            ),
+            title: const Text('Email'),
+            subtitle: Text(
+              email.isEmpty
+                  ? 'No email'
+                  : email,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        Card(
+          child: ListTile(
+            leading: const Icon(
+              Icons.verified_user_outlined,
+            ),
+            title: const Text(
+              'Account',
+            ),
+            subtitle: const Text(
+              'Your Friend Post account',
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        Card(
+          child: ListTile(
+            leading: Icon(
+              Icons.logout,
+              color: Theme.of(context)
+                  .colorScheme
+                  .error,
+            ),
+            title: Text(
+              'Logout',
+              style: TextStyle(
+                color: Theme.of(context)
+                    .colorScheme
+                    .error,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onTap: _logout,
+          ),
+        ),
+
+        const SizedBox(height: 30),
+      ],
+    );
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    final user = _auth.currentUser;
+
+    if (user == null) {
       return const Scaffold(
         body: Center(
-          child:
-              CircularProgressIndicator(),
+          child: Text(
+            'Please login first.',
+          ),
         ),
       );
     }
@@ -304,282 +573,45 @@ class _ProfileScreenState
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'My Profile',
+          'Profile',
           style: TextStyle(
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: _loadProfile,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadProfile,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (_coverPhotoUrl.isNotEmpty)
-              ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(16),
-                child: Image.network(
-                  _coverPhotoUrl,
-                  height: 150,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder:
-                      (context, error, stackTrace) {
-                    return const SizedBox(
-                      height: 150,
-                    );
-                  },
-                ),
+      body: StreamBuilder<
+          DocumentSnapshot<Map<String, dynamic>>>(
+        stream: _userReference(user.uid).snapshots(),
+        builder: (
+          context,
+          snapshot,
+        ) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text(
+                'Could not load profile.',
               ),
-            const SizedBox(height: 20),
-            Center(
-              child: _profileAvatar(),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              _name,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(
-              _email,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.grey,
-              ),
-            ),
-            if (_bio.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              Text(
-                _bio,
-                textAlign: TextAlign.center,
-              ),
-            ],
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: _editProfile,
-                icon: const Icon(
-                  Icons.edit_outlined,
-                ),
-                label: const Text(
-                  'Edit Profile',
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Card(
-              child: Column(
-                children: [
-                  _infoTile(
-                    icon: Icons.phone_outlined,
-                    title: 'Phone',
-                    value: _phone,
-                  ),
-                  _infoTile(
-                    icon: Icons
-                        .location_on_outlined,
-                    title: 'Location',
-                    value: _location,
-                  ),
-                  _infoTile(
-                    icon: Icons.language,
-                    title: 'Website',
-                    value: _website,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: ListTile(
-                leading:
-                    const Icon(Icons.logout),
-                title: const Text('Logout'),
-                onTap: _logout,
-              ),
-            ),
-            const SizedBox(height: 30),
-          ],
-        ),
+            );
+          }
+
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final data =
+              snapshot.data?.data() ??
+                  <String, dynamic>{};
+
+          return _buildProfileContent(
+            user.uid,
+            user,
+            data,
+          );
+        },
       ),
-    );
-  }
-}
-
-class _EditProfileDialog
-    extends StatefulWidget {
-  final TextEditingController nameController;
-  final TextEditingController bioController;
-  final TextEditingController phoneController;
-  final TextEditingController locationController;
-  final TextEditingController websiteController;
-  final Future<bool> Function() onSave;
-
-  const _EditProfileDialog({
-    required this.nameController,
-    required this.bioController,
-    required this.phoneController,
-    required this.locationController,
-    required this.websiteController,
-    required this.onSave,
-  });
-
-  @override
-  State<_EditProfileDialog> createState() =>
-      _EditProfileDialogState();
-}
-
-class _EditProfileDialogState
-    extends State<_EditProfileDialog> {
-  bool _saving = false;
-
-  Future<void> _save() async {
-    if (_saving) return;
-
-    if (widget.nameController.text
-        .trim()
-        .isEmpty) {
-      return;
-    }
-
-    setState(() {
-      _saving = true;
-    });
-
-    final success =
-        await widget.onSave();
-
-    if (!mounted) return;
-
-    setState(() {
-      _saving = false;
-    });
-
-    if (success) {
-      Navigator.of(context).pop(true);
-    } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not update profile.',
-          ),
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Edit Profile'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller:
-                  widget.nameController,
-              textCapitalization:
-                  TextCapitalization.words,
-              decoration:
-                  const InputDecoration(
-                labelText: 'Name',
-                prefixIcon:
-                    Icon(Icons.person_outline),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller:
-                  widget.bioController,
-              maxLines: 3,
-              decoration:
-                  const InputDecoration(
-                labelText: 'Bio',
-                prefixIcon:
-                    Icon(Icons.edit_note),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller:
-                  widget.phoneController,
-              keyboardType:
-                  TextInputType.phone,
-              decoration:
-                  const InputDecoration(
-                labelText: 'Phone',
-                prefixIcon:
-                    Icon(Icons.phone_outlined),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller:
-                  widget.locationController,
-              decoration:
-                  const InputDecoration(
-                labelText: 'Location',
-                prefixIcon: Icon(
-                  Icons.location_on_outlined,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller:
-                  widget.websiteController,
-              keyboardType:
-                  TextInputType.url,
-              decoration:
-                  const InputDecoration(
-                labelText: 'Website',
-                prefixIcon:
-                    Icon(Icons.language),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _saving
-              ? null
-              : () {
-                  Navigator.of(context)
-                      .pop(false);
-                },
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed:
-              _saving ? null : _save,
-          child: _saving
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child:
-                      CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Text('Save'),
-        ),
-      ],
     );
   }
 }
