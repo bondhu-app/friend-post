@@ -16,14 +16,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      # ============================================================
+      # CHECKOUT
+      # ============================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      # ============================================================
+      # JAVA
+      # ============================================================
+
+      - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
+
+      # ============================================================
+      # FLUTTER
+      # ============================================================
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -33,13 +46,13 @@ jobs:
           cache: true
 
       - name: Check Flutter
-        run: flutter --version
-
-      - name: Get dependencies
-        run: flutter pub get
+        run: |
+          flutter --version
+          dart --version
+          java -version
 
       # ============================================================
-      # BACKUP FIREBASE CONFIGURATION
+      # BACKUP FIREBASE
       # ============================================================
 
       - name: Backup Firebase configuration
@@ -48,7 +61,7 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "Backing up Firebase configuration"
+          echo "BACKING UP FIREBASE CONFIGURATION"
           echo "========================================"
 
           if [ ! -f "android/app/google-services.json" ]; then
@@ -61,6 +74,13 @@ jobs:
           echo "Firebase configuration backed up."
 
       # ============================================================
+      # GET DEPENDENCIES
+      # ============================================================
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      # ============================================================
       # REBUILD ANDROID PROJECT
       # ============================================================
 
@@ -70,7 +90,7 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "Rebuilding Android project"
+          echo "REBUILDING ANDROID PROJECT"
           echo "========================================"
 
           rm -rf android
@@ -89,53 +109,38 @@ jobs:
 
           rm -rf test
 
-          echo "Fresh Android project created."
+          echo ""
+          echo "Fresh Flutter Android project created."
 
       # ============================================================
       # CONFIGURE ANDROID
       # ============================================================
 
-      - name: Configure Android Gradle and Kotlin
+      - name: Configure Android
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Configuring Android Gradle and Kotlin"
+          echo "CONFIGURING ANDROID"
           echo "========================================"
 
-          if [ -f "android/settings.gradle.kts" ]; then
-            SETTINGS="android/settings.gradle.kts"
-            DSL="kotlin"
-          elif [ -f "android/settings.gradle" ]; then
-            SETTINGS="android/settings.gradle"
-            DSL="groovy"
-          else
-            echo "ERROR: Android settings file not found."
+          if [ ! -f "android/settings.gradle.kts" ]; then
+            echo "ERROR: android/settings.gradle.kts not found."
             exit 1
           fi
 
-          if [ -f "android/app/build.gradle.kts" ]; then
-            APP="android/app/build.gradle.kts"
-          elif [ -f "android/app/build.gradle" ]; then
-            APP="android/app/build.gradle"
-          else
-            echo "ERROR: Android app Gradle file not found."
+          if [ ! -f "android/app/build.gradle.kts" ]; then
+            echo "ERROR: android/app/build.gradle.kts not found."
             exit 1
           fi
 
-          echo "Settings file: $SETTINGS"
-          echo "App file:      $APP"
-          echo "DSL:           $DSL"
-
-          python3 - "$SETTINGS" "$APP" "$DSL" <<'PY'
+          python3 <<'PY'
           from pathlib import Path
           import re
-          import sys
 
-          settings_path = Path(sys.argv[1])
-          app_path = Path(sys.argv[2])
-          dsl = sys.argv[3]
+          settings_path = Path("android/settings.gradle.kts")
+          app_path = Path("android/app/build.gradle.kts")
 
           settings = settings_path.read_text()
           app = app_path.read_text()
@@ -145,242 +150,122 @@ jobs:
           GOOGLE_SERVICES_VERSION = "4.4.3"
 
           # ==========================================================
-          # KOTLIN DSL
+          # SETTINGS.GRADLE.KTS
           # ==========================================================
 
-          if dsl == "kotlin":
+          # Kotlin plugin
+          kotlin_pattern = re.compile(
+              r'id\(\s*["\']org\.jetbrains\.kotlin\.android["\']\s*\)'
+              r'\s+version\s+["\'][^"\']+["\']'
+              r'\s+apply\s+false'
+          )
 
-              # ------------------------------------------------------
-              # Kotlin plugin
-              # ------------------------------------------------------
+          kotlin_line = (
+              '    id("org.jetbrains.kotlin.android") '
+              f'version "{KOTLIN_VERSION}" apply false'
+          )
 
-              kotlin_pattern = re.compile(
-                  r'id\(\s*["\']org\.jetbrains\.kotlin\.android["\']\s*\)'
-                  r'\s+version\s+["\'][^"\']+["\']'
-                  r'\s+apply\s+false'
-              )
-
-              kotlin_line = (
-                  f'    id("org.jetbrains.kotlin.android") '
-                  f'version "{KOTLIN_VERSION}" apply false'
-              )
-
-              if kotlin_pattern.search(settings):
-                  settings = kotlin_pattern.sub(
-                      kotlin_line,
-                      settings,
-                      count=1,
-                  )
-              else:
-                  if "plugins {" not in settings:
-                      raise SystemExit(
-                          "ERROR: plugins block not found."
-                      )
-
-                  settings = settings.replace(
-                      "plugins {",
-                      "plugins {\n" + kotlin_line,
-                      1,
-                  )
-
-              # ------------------------------------------------------
-              # Android Gradle Plugin
-              # ------------------------------------------------------
-
-              agp_pattern = re.compile(
-                  r'id\(\s*["\']com\.android\.application["\']\s*\)'
-                  r'\s+version\s+["\'][^"\']+["\']'
-                  r'\s+apply\s+false'
-              )
-
-              agp_line = (
-                  f'    id("com.android.application") '
-                  f'version "{AGP_VERSION}" apply false'
-              )
-
-              if agp_pattern.search(settings):
-                  settings = agp_pattern.sub(
-                      agp_line,
-                      settings,
-                      count=1,
-                  )
-
-              # ------------------------------------------------------
-              # Google Services
-              # ------------------------------------------------------
-
-              google_pattern = re.compile(
-                  r'id\(\s*["\']com\.google\.gms\.google-services["\']\s*\)'
-                  r'\s+version\s+["\'][^"\']+["\']'
-                  r'\s+apply\s+false'
-              )
-
-              google_line = (
-                  f'    id("com.google.gms.google-services") '
-                  f'version "{GOOGLE_SERVICES_VERSION}" apply false'
-              )
-
-              if google_pattern.search(settings):
-                  settings = google_pattern.sub(
-                      google_line,
-                      settings,
-                      count=1,
-                  )
-              else:
-                  settings = settings.replace(
-                      "plugins {",
-                      "plugins {\n" + google_line,
-                      1,
-                  )
-
-              # ------------------------------------------------------
-              # Application ID
-              # ------------------------------------------------------
-
-              app = re.sub(
-                  r'applicationId\s*=\s*["\'][^"\']+["\']',
-                  'applicationId = "com.friendpost.app"',
-                  app,
+          if kotlin_pattern.search(settings):
+              settings = kotlin_pattern.sub(
+                  kotlin_line,
+                  settings,
                   count=1,
               )
-
-              # ------------------------------------------------------
-              # Google Services app plugin
-              # ------------------------------------------------------
-
-              if 'id("com.google.gms.google-services")' not in app:
-
-                  if "plugins {" not in app:
-                      raise SystemExit(
-                          "ERROR: App plugins block not found."
-                      )
-
-                  app = app.replace(
-                      "plugins {",
-                      "plugins {\n"
-                      '    id("com.google.gms.google-services")',
-                      1,
-                  )
-
-          # ==========================================================
-          # GROOVY DSL
-          # ==========================================================
-
           else:
-
-              # ------------------------------------------------------
-              # Kotlin plugin
-              # ------------------------------------------------------
-
-              kotlin_pattern = re.compile(
-                  r'id\s+["\']org\.jetbrains\.kotlin\.android["\']'
-                  r'\s+version\s+["\'][^"\']+["\']'
-                  r'\s+apply\s+false'
-              )
-
-              kotlin_line = (
-                  f'    id "org.jetbrains.kotlin.android" '
-                  f'version "{KOTLIN_VERSION}" apply false'
-              )
-
-              if kotlin_pattern.search(settings):
-                  settings = kotlin_pattern.sub(
-                      kotlin_line,
-                      settings,
-                      count=1,
-                  )
-              else:
-                  if "plugins {" not in settings:
-                      raise SystemExit(
-                          "ERROR: plugins block not found."
-                      )
-
-                  settings = settings.replace(
-                      "plugins {",
-                      "plugins {\n" + kotlin_line,
-                      1,
+              if "plugins {" not in settings:
+                  raise SystemExit(
+                      "ERROR: plugins block not found in settings.gradle.kts"
                   )
 
-              # ------------------------------------------------------
-              # Android Gradle Plugin
-              # ------------------------------------------------------
-
-              agp_pattern = re.compile(
-                  r'id\s+["\']com\.android\.application["\']'
-                  r'\s+version\s+["\'][^"\']+["\']'
-                  r'\s+apply\s+false'
+              settings = settings.replace(
+                  "plugins {",
+                  "plugins {\n" + kotlin_line,
+                  1,
               )
 
-              agp_line = (
-                  f'    id "com.android.application" '
-                  f'version "{AGP_VERSION}" apply false'
-              )
+          # Android Gradle Plugin
+          agp_pattern = re.compile(
+              r'id\(\s*["\']com\.android\.application["\']\s*\)'
+              r'\s+version\s+["\'][^"\']+["\']'
+              r'\s+apply\s+false'
+          )
 
-              if agp_pattern.search(settings):
-                  settings = agp_pattern.sub(
-                      agp_line,
-                      settings,
-                      count=1,
-                  )
+          agp_line = (
+              '    id("com.android.application") '
+              f'version "{AGP_VERSION}" apply false'
+          )
 
-              # ------------------------------------------------------
-              # Google Services
-              # ------------------------------------------------------
-
-              google_pattern = re.compile(
-                  r'id\s+["\']com\.google\.gms\.google-services["\']'
-                  r'\s+version\s+["\'][^"\']+["\']'
-                  r'\s+apply\s+false'
-              )
-
-              google_line = (
-                  f'    id "com.google.gms.google-services" '
-                  f'version "{GOOGLE_SERVICES_VERSION}" apply false'
-              )
-
-              if google_pattern.search(settings):
-                  settings = google_pattern.sub(
-                      google_line,
-                      settings,
-                      count=1,
-                  )
-              else:
-                  settings = settings.replace(
-                      "plugins {",
-                      "plugins {\n" + google_line,
-                      1,
-                  )
-
-              # ------------------------------------------------------
-              # Application ID
-              # ------------------------------------------------------
-
-              app = re.sub(
-                  r'applicationId\s+["\'][^"\']+["\']',
-                  'applicationId "com.friendpost.app"',
-                  app,
+          if agp_pattern.search(settings):
+              settings = agp_pattern.sub(
+                  agp_line,
+                  settings,
                   count=1,
               )
-
-              # ------------------------------------------------------
-              # Google Services app plugin
-              # ------------------------------------------------------
-
-              if "com.google.gms.google-services" not in app:
-
-                  if "plugins {" not in app:
-                      raise SystemExit(
-                          "ERROR: App plugins block not found."
-                      )
-
-                  app = app.replace(
-                      "plugins {",
-                      "plugins {\n"
-                      '    id "com.google.gms.google-services"',
-                      1,
+          else:
+              if "plugins {" not in settings:
+                  raise SystemExit(
+                      "ERROR: plugins block not found for AGP"
                   )
+
+              settings = settings.replace(
+                  "plugins {",
+                  "plugins {\n" + agp_line,
+                  1,
+              )
+
+          # Google Services
+          google_pattern = re.compile(
+              r'id\(\s*["\']com\.google\.gms\.google-services["\']\s*\)'
+              r'\s+version\s+["\'][^"\']+["\']'
+              r'\s+apply\s+false'
+          )
+
+          google_line = (
+              '    id("com.google.gms.google-services") '
+              f'version "{GOOGLE_SERVICES_VERSION}" apply false'
+          )
+
+          if google_pattern.search(settings):
+              settings = google_pattern.sub(
+                  google_line,
+                  settings,
+                  count=1,
+              )
+          else:
+              settings = settings.replace(
+                  "plugins {",
+                  "plugins {\n" + google_line,
+                  1,
+              )
 
           settings_path.write_text(settings)
+
+          # ==========================================================
+          # APP BUILD.GRADLE.KTS
+          # ==========================================================
+
+          # Application ID
+          app = re.sub(
+              r'applicationId\s*=\s*["\'][^"\']+["\']',
+              'applicationId = "com.friendpost.app"',
+              app,
+              count=1,
+          )
+
+          # Google Services plugin
+          if 'id("com.google.gms.google-services")' not in app:
+              if "plugins {" not in app:
+                  raise SystemExit(
+                      "ERROR: app plugins block not found"
+                  )
+
+              app = app.replace(
+                  "plugins {",
+                  "plugins {\n"
+                  '    id("com.google.gms.google-services")',
+                  1,
+              )
+
           app_path.write_text(app)
 
           print("")
@@ -389,143 +274,91 @@ jobs:
           print("========================================")
           print(f"Kotlin Plugin : {KOTLIN_VERSION}")
           print(f"Android Plugin: {AGP_VERSION}")
-          print(
-              f"Google Service: {GOOGLE_SERVICES_VERSION}"
-          )
+          print(f"Google Service: {GOOGLE_SERVICES_VERSION}")
           print("Application ID: com.friendpost.app")
-          print(f"DSL           : {dsl}")
-          print("")
+          print("========================================")
           PY
 
       # ============================================================
-      # FORCE KOTLIN VERSION
+      # VERIFY KOTLIN
       # ============================================================
 
-      - name: Force Kotlin 2.3.0
+      - name: Verify Kotlin configuration
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "Forcing Kotlin 2.3.0"
-          echo "========================================"
-
-          if [ -f "android/settings.gradle.kts" ]; then
-
-            python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("android/settings.gradle.kts")
-          text = path.read_text()
-
-          text = re.sub(
-              r'id\(\s*["\']org\.jetbrains\.kotlin\.android["\']\s*\)'
-              r'\s+version\s+["\'][^"\']+["\']'
-              r'\s+apply\s+false',
-              'id("org.jetbrains.kotlin.android") '
-              'version "2.3.0" apply false',
-              text,
-          )
-
-          path.write_text(text)
-          PY
-
-          elif [ -f "android/settings.gradle" ]; then
-
-            python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("android/settings.gradle")
-          text = path.read_text()
-
-          text = re.sub(
-              r'id\s+["\']org\.jetbrains\.kotlin\.android["\']'
-              r'\s+version\s+["\'][^"\']+["\']'
-              r'\s+apply\s+false',
-              'id "org.jetbrains.kotlin.android" '
-              'version "2.3.0" apply false',
-              text,
-          )
-
-          path.write_text(text)
-          PY
-
-          else
-            echo "ERROR: No Android settings file found."
-            exit 1
-          fi
-
-          echo ""
-          echo "Kotlin configuration after force:"
-          grep -n "org.jetbrains.kotlin.android" \
-            android/settings.gradle* || true
-
-      # ============================================================
-      # VERIFY CONFIGURATION
-      # ============================================================
-
-      - name: Verify Android configuration
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING ANDROID CONFIGURATION"
+          echo "VERIFYING KOTLIN"
           echo "========================================"
 
           echo ""
-          echo "Settings:"
-          ls -la android/settings.gradle*
-
-          echo ""
-          echo "Kotlin:"
+          echo "Kotlin plugin configuration:"
           grep -n \
             "org.jetbrains.kotlin.android" \
-            android/settings.gradle*
-
-          echo ""
-          echo "Android Gradle Plugin:"
-          grep -n \
-            "com.android.application" \
-            android/settings.gradle*
-
-          echo ""
-          echo "Google Services:"
-          grep -n \
-            "google.gms.google-services" \
-            android/settings.gradle*
-
-          echo ""
-          echo "Application ID:"
-          grep -n \
-            "applicationId" \
-            android/app/build.gradle*
+            android/settings.gradle.kts
 
           echo ""
 
           if grep -q \
             'id("org.jetbrains.kotlin.android") version "2.3.0" apply false' \
-            android/settings.gradle.kts 2>/dev/null; then
-
-            echo "SUCCESS: Kotlin 2.3.0 configured."
-
-          elif grep -q \
-            'id "org.jetbrains.kotlin.android" version "2.3.0" apply false' \
-            android/settings.gradle 2>/dev/null; then
+            android/settings.gradle.kts; then
 
             echo "SUCCESS: Kotlin 2.3.0 configured."
 
           else
 
-            echo "ERROR: Kotlin 2.3.0 was NOT configured."
+            echo "ERROR: Kotlin 2.3.0 NOT found."
             exit 1
 
           fi
 
       # ============================================================
-      # VERIFY FIREBASE
+      # VERIFY AGP
+      # ============================================================
+
+      - name: Verify Android Gradle Plugin
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING ANDROID GRADLE PLUGIN"
+          echo "========================================"
+
+          grep -n \
+            "com.android.application" \
+            android/settings.gradle.kts
+
+          echo ""
+          echo "AGP configuration verified."
+
+      # ============================================================
+      # VERIFY GOOGLE SERVICES
+      # ============================================================
+
+      - name: Verify Google Services
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING GOOGLE SERVICES"
+          echo "========================================"
+
+          grep -n \
+            "google.gms.google-services" \
+            android/settings.gradle.kts
+
+          grep -n \
+            "google.gms.google-services" \
+            android/app/build.gradle.kts
+
+          echo ""
+          echo "Google Services plugin verified."
+
+      # ============================================================
+      # VERIFY FIREBASE PACKAGE
       # ============================================================
 
       - name: Verify Firebase package
@@ -534,25 +367,63 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "VERIFYING FIREBASE"
+          echo "VERIFYING FIREBASE PACKAGE"
           echo "========================================"
 
+          echo ""
+          echo "Android application ID:"
+          grep -n \
+            "applicationId" \
+            android/app/build.gradle.kts
+
+          echo ""
+          echo "Firebase package:"
+          grep -n \
+            '"package_name"' \
+            android/app/google-services.json
+
+          echo ""
+
           grep -q \
-            'com.friendpost.app' \
-            android/app/build.gradle*
+            'applicationId = "com.friendpost.app"' \
+            android/app/build.gradle.kts
 
           grep -q \
             '"package_name": "com.friendpost.app"' \
             android/app/google-services.json
 
+          echo "SUCCESS: Firebase and Android package match."
+
+      # ============================================================
+      # VERIFY GRADLE WRAPPER
+      # ============================================================
+
+      - name: Verify Gradle wrapper
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING GRADLE WRAPPER"
+          echo "========================================"
+
+          test -f android/gradlew
+          test -f android/gradle/wrapper/gradle-wrapper.properties
+
           echo ""
-          echo "SUCCESS: Android and Firebase package names match."
+          echo "Gradle distribution:"
+          grep \
+            "distributionUrl" \
+            android/gradle/wrapper/gradle-wrapper.properties
+
+          echo ""
+          echo "Gradle wrapper verified."
 
       # ============================================================
-      # CHECK LEGACY V1 EMBEDDING
+      # CHECK V1 EMBEDDING
       # ============================================================
 
-      - name: Check for legacy Android V1 embedding
+      - name: Check Android V1 embedding
         shell: bash
         run: |
           set -e
@@ -574,6 +445,7 @@ jobs:
             exit 1
           fi
 
+          echo ""
           echo "SUCCESS: No Android V1 embedding found."
 
       # ============================================================
@@ -590,7 +462,9 @@ jobs:
           echo "========================================"
 
           test -f android/gradlew
-          test -f android/gradle/wrapper/gradle-wrapper.properties
+          test -f android/settings.gradle.kts
+          test -f android/build.gradle.kts
+          test -f android/app/build.gradle.kts
           test -f android/app/src/main/AndroidManifest.xml
           test -f android/app/google-services.json
 
@@ -598,18 +472,82 @@ jobs:
           echo "Android project verification passed."
 
       # ============================================================
-      # ANALYZE
+      # FLUTTER ANALYZE
       # ============================================================
 
       - name: Analyze project
-        run: flutter analyze
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "RUNNING FLUTTER ANALYZE"
+          echo "========================================"
+
+          flutter analyze
 
       # ============================================================
-      # BUILD APK
+      # CLEAN BUILD
+      # ============================================================
+
+      - name: Clean Flutter build
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CLEANING BUILD"
+          echo "========================================"
+
+          flutter clean
+          flutter pub get
+
+      # ============================================================
+      # FINAL CONFIGURATION CHECK
+      # ============================================================
+
+      - name: Final Kotlin check before build
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "FINAL KOTLIN CHECK"
+          echo "========================================"
+
+          echo ""
+          echo "settings.gradle.kts:"
+          cat android/settings.gradle.kts
+
+          echo ""
+          echo "Kotlin plugin:"
+          grep \
+            "org.jetbrains.kotlin.android" \
+            android/settings.gradle.kts
+
+          echo ""
+
+          if ! grep -q \
+            'version "2.3.0" apply false' \
+            android/settings.gradle.kts; then
+
+            echo "ERROR: Kotlin 2.3.0 is not active."
+            exit 1
+          fi
+
+          echo "SUCCESS: Kotlin 2.3.0 is active before build."
+
+      # ============================================================
+      # BUILD RELEASE APK
       # ============================================================
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "BUILDING RELEASE APK"
+          echo "========================================"
+
+          flutter build apk --release
 
       # ============================================================
       # VERIFY APK
@@ -623,7 +561,7 @@ jobs:
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
           echo "========================================"
-          echo "CHECKING APK"
+          echo "VERIFYING APK"
           echo "========================================"
 
           if [ ! -f "$APK" ]; then
@@ -632,8 +570,9 @@ jobs:
           fi
 
           echo ""
+          echo "========================================"
           echo "APK BUILD SUCCESS"
-          echo ""
+          echo "========================================"
 
           ls -lh "$APK"
 
