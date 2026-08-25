@@ -17,7 +17,6 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard> {
   final DataService _dataService = DataService.instance;
-
   final TextEditingController _commentController =
       TextEditingController();
 
@@ -71,7 +70,6 @@ class _PostCardState extends State<PostCard> {
 
     if (timestamp is Timestamp) {
       final date = timestamp.toDate();
-
       final now = DateTime.now();
       final difference = now.difference(date);
 
@@ -97,6 +95,18 @@ class _PostCardState extends State<PostCard> {
     return 'এইমাত্র';
   }
 
+  void _showSnackBar(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
+
   Future<void> _toggleLike() async {
     if (_working) {
       return;
@@ -109,15 +119,7 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.likePost(_postId);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Like করা যায়নি: $e'),
-        ),
-      );
+      _showSnackBar('Like করা যায়নি: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -139,25 +141,15 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.sharePost(_postId);
 
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Post শেয়ার করা হয়েছে।'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Post শেয়ার করা হয়েছে।'),
-        ),
-      );
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Share করা যায়নি: $e'),
-        ),
-      );
+      _showSnackBar('Share করা যায়নি: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -180,28 +172,21 @@ class _PostCardState extends State<PostCard> {
         text: text,
       );
 
-      _commentController.clear();
-
-      if (mounted) {
-        FocusScope.of(context).unfocus();
-      }
-    } catch (e) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Comment করা যায়নি: $e'),
-        ),
-      );
+      _commentController.clear();
+      FocusScope.of(context).unfocus();
+    } catch (e) {
+      _showSnackBar('Comment করা যায়নি: $e');
     }
   }
 
   Future<void> _deletePost() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Post মুছে ফেলবেন?'),
           content: const Text(
@@ -210,13 +195,13 @@ class _PostCardState extends State<PostCard> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context, false);
+                Navigator.of(dialogContext).pop(false);
               },
               child: const Text('না'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.pop(context, true);
+                Navigator.of(dialogContext).pop(true);
               },
               child: const Text('মুছে ফেলুন'),
             ),
@@ -232,15 +217,7 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.deletePost(_postId);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Post মুছে ফেলা যায়নি: $e'),
-        ),
-      );
+      _showSnackBar('Post মুছে ফেলা যায়নি: $e');
     }
   }
 
@@ -256,6 +233,19 @@ class _PostCardState extends State<PostCard> {
       radius: 23,
       child: Icon(Icons.person),
     );
+  }
+
+  Future<void> _deleteComment({
+    required String commentId,
+  }) async {
+    try {
+      await _dataService.deleteComment(
+        postId: _postId,
+        commentId: commentId,
+      );
+    } catch (e) {
+      _showSnackBar('Comment মুছতে সমস্যা: $e');
+    }
   }
 
   @override
@@ -604,36 +594,25 @@ class _PostCardState extends State<PostCard> {
                                         ),
                                         if (userId ==
                                             currentUid)
-                                          InkWell(
-                                            onTap: () async {
-                                              try {
-                                                await _dataService
-                                                    .deleteComment(
-                                                  postId: _postId,
-                                                  commentId:
-                                                      comment.id,
-                                                );
-                                              } catch (e) {
-                                                if (!mounted) {
-                                                  return;
-                                                }
-
-                                                ScaffoldMessenger
-                                                    .of(context)
-                                                    .showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      'Comment মুছতে সমস্যা: $e',
-                                                    ),
-                                                  ),
-                                                );
-                                              }
+                                          IconButton(
+                                            onPressed: () {
+                                              _deleteComment(
+                                                commentId:
+                                                    comment.id,
+                                              );
                                             },
-                                            child: const Icon(
+                                            icon: const Icon(
                                               Icons
                                                   .delete_outline,
                                               size: 18,
                                               color: Colors.red,
+                                            ),
+                                            padding:
+                                                EdgeInsets.zero,
+                                            constraints:
+                                                const BoxConstraints(
+                                              minWidth: 32,
+                                              minHeight: 32,
                                             ),
                                           ),
                                       ],
