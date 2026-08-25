@@ -2,63 +2,94 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-class NotificationsScreen extends StatefulWidget {
+class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
-  @override
-  State<NotificationsScreen> createState() =>
-      _NotificationsScreenState();
-}
-
-class _NotificationsScreenState
-    extends State<NotificationsScreen> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore =
+  static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
-  User? get _currentUser => _auth.currentUser;
-
-  Stream<QuerySnapshot<Map<String, dynamic>>>
-      _notificationsStream() {
-    final user = _currentUser;
-
-    if (user == null) {
-      return const Stream.empty();
-    }
-
+  CollectionReference<Map<String, dynamic>> _notificationsCollection(
+    String uid,
+  ) {
     return _firestore
         .collection('users')
-        .doc(user.uid)
-        .collection('notifications')
-        .orderBy(
-          'createdAt',
-          descending: true,
-        )
-        .limit(100)
-        .snapshots();
+        .doc(uid)
+        .collection('notifications');
+  }
+
+  String _textFromData(Map<String, dynamic> data) {
+    final value = data['message'] ??
+        data['text'] ??
+        data['title'] ??
+        'নতুন Notification';
+
+    return value.toString();
+  }
+
+  String _titleFromData(Map<String, dynamic> data) {
+    final value = data['title'];
+
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+
+    return 'Notification';
+  }
+
+  String _timeText(dynamic value) {
+    if (value is Timestamp) {
+      final date = value.toDate();
+      final difference = DateTime.now().difference(date);
+
+      if (difference.inMinutes < 1) {
+        return 'এইমাত্র';
+      }
+
+      if (difference.inMinutes < 60) {
+        return '${difference.inMinutes} মিনিট আগে';
+      }
+
+      if (difference.inHours < 24) {
+        return '${difference.inHours} ঘণ্টা আগে';
+      }
+
+      if (difference.inDays < 7) {
+        return '${difference.inDays} দিন আগে';
+      }
+
+      return '${date.day}/${date.month}/${date.year}';
+    }
+
+    return '';
   }
 
   Future<void> _markAsRead(
     DocumentSnapshot<Map<String, dynamic>> notification,
   ) async {
     try {
-      if (notification.data()?['read'] == true) {
-        return;
-      }
-
       await notification.reference.update({
         'read': true,
-        'readAt': FieldValue.serverTimestamp(),
+        'isRead': true,
       });
     } catch (e) {
-      debugPrint(
-        'Mark notification as read error: $e',
-      );
+      debugPrint('Mark notification read error: $e');
+    }
+  }
+
+  Future<void> _deleteNotification(
+    DocumentSnapshot<Map<String, dynamic>> notification,
+  ) async {
+    try {
+      await notification.reference.delete();
+    } catch (e) {
+      debugPrint('Delete notification error: $e');
     }
   }
 
   Future<void> _markAllAsRead(
-    List<DocumentSnapshot<Map<String, dynamic>>> notifications,
+    String uid,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> notifications,
   ) async {
     if (notifications.isEmpty) {
       return;
@@ -70,539 +101,67 @@ class _NotificationsScreenState
       for (final notification in notifications) {
         final data = notification.data();
 
-        if (data['read'] != true) {
-          batch.update(
-            notification.reference,
-            {
-              'read': true,
-              'readAt':
-                  FieldValue.serverTimestamp(),
-            },
-          );
+        final read = data['read'];
+        final isRead = data['isRead'];
+
+        final alreadyRead =
+            read == true || isRead == true;
+
+        if (!alreadyRead) {
+          batch.update(notification.reference, {
+            'read': true,
+            'isRead': true,
+          });
         }
       }
 
       await batch.commit();
-
-      if (!mounted) return;
-
-      _showMessage(
-        'সব Notification পড়া হয়েছে।',
-      );
     } catch (e) {
-      debugPrint(
-        'Mark all notifications error: $e',
-      );
-
-      if (!mounted) return;
-
-      _showMessage(
-        'Notification update করা যায়নি।',
-      );
+      debugPrint('Mark all notifications read error: $e');
     }
   }
 
-  Future<void> _deleteNotification(
-    DocumentSnapshot<Map<String, dynamic>> notification,
-  ) async {
-    try {
-      await notification.reference.delete();
-    } catch (e) {
-      debugPrint(
-        'Delete notification error: $e',
-      );
-
-      if (!mounted) return;
-
-      _showMessage(
-        'Notification মুছে ফেলা যায়নি।',
-      );
-    }
-  }
-
-  Future<void> _clearAllNotifications(
-    List<DocumentSnapshot<Map<String, dynamic>>> notifications,
-  ) async {
-    if (notifications.isEmpty) {
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text(
-            'সব Notification মুছে ফেলবেন?',
-          ),
-          content: const Text(
-            'এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না।',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
-              child: const Text('না'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
-              child: const Text('মুছে ফেলুন'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) {
-      return;
-    }
-
-    try {
-      final batch = _firestore.batch();
-
-      for (final notification in notifications) {
-        batch.delete(notification.reference);
-      }
-
-      await batch.commit();
-
-      if (!mounted) return;
-
-      _showMessage(
-        'সব Notification মুছে ফেলা হয়েছে।',
-      );
-    } catch (e) {
-      debugPrint(
-        'Clear notifications error: $e',
-      );
-
-      if (!mounted) return;
-
-      _showMessage(
-        'সব Notification মুছে ফেলা যায়নি।',
-      );
-    }
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  String _notificationTitle(
+  Widget _notificationIcon(
     Map<String, dynamic> data,
   ) {
-    final title = data['title'];
+    final type = (data['type'] ?? '').toString();
 
-    if (title is String &&
-        title.trim().isNotEmpty) {
-      return title.trim();
-    }
-
-    final type = data['type']?.toString();
+    IconData icon;
 
     switch (type) {
       case 'like':
-        return 'নতুন Like';
-      case 'comment':
-        return 'নতুন Comment';
-      case 'friend_request':
-        return 'Friend Request';
-      case 'friend_accepted':
-        return 'Friend Request Accepted';
-      case 'share':
-        return 'Post Share হয়েছে';
-      default:
-        return 'Notification';
-    }
-  }
-
-  String _notificationBody(
-    Map<String, dynamic> data,
-  ) {
-    final body = data['body'];
-
-    if (body is String &&
-        body.trim().isNotEmpty) {
-      return body.trim();
-    }
-
-    final message = data['message'];
-
-    if (message is String &&
-        message.trim().isNotEmpty) {
-      return message.trim();
-    }
-
-    final senderName = data['senderName'];
-
-    final name =
-        senderName is String &&
-                senderName.trim().isNotEmpty
-            ? senderName.trim()
-            : 'কেউ একজন';
-
-    final type = data['type']?.toString();
-
-    switch (type) {
-      case 'like':
-        return '$name আপনার পোস্টে Like দিয়েছে।';
+        icon = Icons.favorite;
+        break;
 
       case 'comment':
-        return '$name আপনার পোস্টে Comment করেছে।';
+        icon = Icons.comment;
+        break;
 
       case 'friend_request':
-        return '$name আপনাকে Friend Request পাঠিয়েছে।';
+        icon = Icons.person_add;
+        break;
 
       case 'friend_accepted':
-        return '$name আপনার Friend Request গ্রহণ করেছে।';
+        icon = Icons.people;
+        break;
 
-      case 'share':
-        return '$name আপনার পোস্ট Share করেছে।';
-
-      default:
-        return 'আপনার জন্য একটি নতুন Notification আছে।';
-    }
-  }
-
-  IconData _notificationIcon(
-    Map<String, dynamic> data,
-  ) {
-    final type = data['type']?.toString();
-
-    switch (type) {
-      case 'like':
-        return Icons.favorite;
-
-      case 'comment':
-        return Icons.mode_comment;
-
-      case 'friend_request':
-        return Icons.person_add;
-
-      case 'friend_accepted':
-        return Icons.people;
-
-      case 'share':
-        return Icons.share;
+      case 'message':
+        icon = Icons.message;
+        break;
 
       default:
-        return Icons.notifications;
+        icon = Icons.notifications;
     }
-  }
-
-  Color _notificationIconColor(
-    Map<String, dynamic> data,
-  ) {
-    final type = data['type']?.toString();
-
-    switch (type) {
-      case 'like':
-        return Colors.red;
-
-      case 'comment':
-        return Colors.blue;
-
-      case 'friend_request':
-        return Colors.orange;
-
-      case 'friend_accepted':
-        return Colors.green;
-
-      case 'share':
-        return Colors.purple;
-
-      default:
-        return Colors.indigo;
-    }
-  }
-
-  String _timeText(
-    Map<String, dynamic> data,
-  ) {
-    final timestamp = data['createdAt'];
-
-    if (timestamp is! Timestamp) {
-      return 'এইমাত্র';
-    }
-
-    final date = timestamp.toDate();
-    final now = DateTime.now();
-
-    final difference = now.difference(date);
-
-    if (difference.isNegative) {
-      return 'এইমাত্র';
-    }
-
-    if (difference.inMinutes < 1) {
-      return 'এইমাত্র';
-    }
-
-    if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} মিনিট আগে';
-    }
-
-    if (difference.inHours < 24) {
-      return '${difference.inHours} ঘণ্টা আগে';
-    }
-
-    if (difference.inDays < 7) {
-      return '${difference.inDays} দিন আগে';
-    }
-
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  Widget _notificationAvatar(
-    Map<String, dynamic> data,
-  ) {
-    final photoUrl =
-        data['senderPhotoUrl']?.toString() ??
-            data['userPhotoUrl']?.toString() ??
-            '';
-
-    if (photoUrl.trim().isNotEmpty) {
-      return CircleAvatar(
-        radius: 27,
-        backgroundImage: NetworkImage(
-          photoUrl.trim(),
-        ),
-      );
-    }
-
-    final color =
-        _notificationIconColor(data);
 
     return CircleAvatar(
-      radius: 27,
-      backgroundColor:
-          color.withValues(alpha: 0.12),
-      child: Icon(
-        _notificationIcon(data),
-        color: color,
-      ),
-    );
-  }
-
-  Widget _buildNotificationItem(
-    DocumentSnapshot<Map<String, dynamic>> notification,
-  ) {
-    final data = notification.data();
-
-    if (data == null) {
-      return const SizedBox();
-    }
-
-    final isRead = data['read'] == true;
-
-    return Dismissible(
-      key: ValueKey(notification.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        margin: const EdgeInsets.only(
-          bottom: 8,
-        ),
-        padding: const EdgeInsets.only(
-          right: 24,
-        ),
-        alignment: Alignment.centerRight,
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius:
-              BorderRadius.circular(16),
-        ),
-        child: const Icon(
-          Icons.delete_outline,
-          color: Colors.white,
-          size: 28,
-        ),
-      ),
-      confirmDismiss: (_) async {
-        try {
-          await _deleteNotification(
-            notification,
-          );
-          return true;
-        } catch (_) {
-          return false;
-        }
-      },
-      child: Card(
-        margin: const EdgeInsets.only(
-          bottom: 8,
-        ),
-        elevation: isRead ? 0 : 1,
-        color: isRead
-            ? null
-            : Theme.of(context)
-                .colorScheme
-                .primaryContainer
-                .withValues(alpha: 0.35),
-        shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(16),
-        ),
-        child: InkWell(
-          borderRadius:
-              BorderRadius.circular(16),
-          onTap: () {
-            _markAsRead(notification);
-          },
-          child: Padding(
-            padding:
-                const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                _notificationAvatar(data),
-
-                const SizedBox(width: 12),
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _notificationTitle(
-                                data,
-                              ),
-                              style:
-                                  TextStyle(
-                                fontSize: 15,
-                                fontWeight:
-                                    isRead
-                                        ? FontWeight.w500
-                                        : FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          if (!isRead)
-                            Container(
-                              width: 9,
-                              height: 9,
-                              margin:
-                                  const EdgeInsets
-                                      .only(
-                                top: 5,
-                                left: 8,
-                              ),
-                              decoration:
-                                  BoxDecoration(
-                                shape:
-                                    BoxShape.circle,
-                                color: Theme.of(
-                                  context,
-                                )
-                                    .colorScheme
-                                    .primary,
-                              ),
-                            ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 5),
-
-                      Text(
-                        _notificationBody(data),
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.35,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-
-                      const SizedBox(height: 7),
-
-                      Text(
-                        _timeText(data),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  onSelected: (value) {
-                    if (value == 'read') {
-                      _markAsRead(
-                        notification,
-                      );
-                    }
-
-                    if (value == 'delete') {
-                      _deleteNotification(
-                        notification,
-                      );
-                    }
-                  },
-                  itemBuilder: (context) {
-                    return [
-                      if (!isRead)
-                        const PopupMenuItem(
-                          value: 'read',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons
-                                    .mark_email_read_outlined,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'পড়া হয়েছে',
-                              ),
-                            ],
-                          ),
-                        ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons
-                                  .delete_outline,
-                              color: Colors.red,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Delete',
-                            ),
-                          ],
-                        ),
-                      ),
-                    ];
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      radius: 24,
+      child: Icon(icon),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = _currentUser;
+    final user = _auth.currentUser;
 
     if (user == null) {
       return const Scaffold(
@@ -614,6 +173,8 @@ class _NotificationsScreenState
       );
     }
 
+    final uid = user.uid;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -624,74 +185,42 @@ class _NotificationsScreenState
         ),
         actions: [
           StreamBuilder<
-              QuerySnapshot<
-                  Map<String, dynamic>>>(
-            stream: _notificationsStream(),
+              QuerySnapshot<Map<String, dynamic>>>(
+            stream: _notificationsCollection(uid)
+                .orderBy(
+                  'createdAt',
+                  descending: true,
+                )
+                .limit(100)
+                .snapshots(),
             builder: (context, snapshot) {
               final notifications =
-                  snapshot.data?.docs ?? [];
+                  snapshot.data?.docs ??
+                      <QueryDocumentSnapshot<
+                          Map<String, dynamic>>>[];
 
-              final unreadCount =
-                  notifications.where(
-                (notification) {
-                  return notification
-                          .data()['read'] !=
-                      true;
-                },
-              ).length;
+              final unread = notifications.where((doc) {
+                final data = doc.data();
 
-              if (unreadCount == 0) {
-                return const SizedBox();
+                return data['read'] != true &&
+                    data['isRead'] != true;
+              }).toList();
+
+              if (unread.isEmpty) {
+                return const SizedBox.shrink();
               }
 
-              return PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'read') {
-                    _markAllAsRead(
-                      notifications,
-                    );
-                  }
-
-                  if (value == 'clear') {
-                    _clearAllNotifications(
-                      notifications,
-                    );
-                  }
+              return IconButton(
+                tooltip: 'Mark all as read',
+                onPressed: () {
+                  _markAllAsRead(
+                    uid,
+                    notifications,
+                  );
                 },
-                itemBuilder: (context) {
-                  return const [
-                    PopupMenuItem(
-                      value: 'read',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons
-                                .mark_email_read_outlined,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'সব পড়া হয়েছে',
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'clear',
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_sweep_outlined,
-                            color: Colors.red,
-                          ),
-                          SizedBox(width: 8),
-                          Text(
-                            'সব মুছে ফেলুন',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ];
-                },
+                icon: const Icon(
+                  Icons.done_all,
+                ),
               );
             },
           ),
@@ -699,49 +228,25 @@ class _NotificationsScreenState
       ),
       body: StreamBuilder<
           QuerySnapshot<Map<String, dynamic>>>(
-        stream: _notificationsStream(),
+        stream: _notificationsCollection(uid)
+            .orderBy(
+              'createdAt',
+              descending: true,
+            )
+            .limit(100)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             debugPrint(
               'Notifications error: ${snapshot.error}',
             );
 
-            return Center(
+            return const Center(
               child: Padding(
-                padding:
-                    const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize:
-                      MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons
-                          .notifications_off_outlined,
-                      size: 60,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Notification লোড করা যায়নি।',
-                      textAlign:
-                          TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: () {
-                        setState(() {});
-                      },
-                      icon: const Icon(
-                        Icons.refresh,
-                      ),
-                      label: const Text(
-                        'আবার চেষ্টা করুন',
-                      ),
-                    ),
-                  ],
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Notifications load করা যায়নি।',
+                  textAlign: TextAlign.center,
                 ),
               ),
             );
@@ -750,57 +255,177 @@ class _NotificationsScreenState
           if (snapshot.connectionState ==
               ConnectionState.waiting) {
             return const Center(
-              child:
-                  CircularProgressIndicator(),
+              child: CircularProgressIndicator(),
             );
           }
 
           final notifications =
-              snapshot.data?.docs ?? [];
+              snapshot.data?.docs ??
+                  <QueryDocumentSnapshot<
+                      Map<String, dynamic>>>[];
 
           if (notifications.isEmpty) {
             return RefreshIndicator(
-              onRefresh: () async {
-                setState(() {});
-              },
+              onRefresh: () async {},
               child: ListView(
                 physics:
                     const AlwaysScrollableScrollPhysics(),
                 children: const [
-                  SizedBox(height: 130),
-                  Icon(
-                    Icons.notifications_none,
-                    size: 80,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 16),
+                  SizedBox(height: 180),
                   Center(
-                    child: Text(
-                      'এখনও কোনো Notification নেই।',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.notifications_none,
+                          size: 70,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'এখনও কোনো Notification নেই।',
+                          style: TextStyle(
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: 300),
                 ],
               ),
             );
           }
 
           return RefreshIndicator(
-            onRefresh: () async {
-              setState(() {});
-            },
+            onRefresh: () async {},
             child: ListView.builder(
               physics:
                   const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(12),
               itemCount: notifications.length,
               itemBuilder: (context, index) {
-                return _buildNotificationItem(
-                  notifications[index],
+                final notification =
+                    notifications[index];
+
+                // গুরুত্বপূর্ণ:
+                // data() nullable হতে পারে।
+                // তাই সরাসরি data['x'] ব্যবহার করা যাবে না।
+                // এখানে null হলে empty map নেওয়া হয়েছে।
+                final data =
+                    notification.data();
+
+                final title =
+                    _titleFromData(data);
+
+                final message =
+                    _textFromData(data);
+
+                final createdAt =
+                    data['createdAt'];
+
+                final time =
+                    _timeText(createdAt);
+
+                final isRead =
+                    data['read'] == true ||
+                        data['isRead'] == true;
+
+                return Card(
+                  margin:
+                      const EdgeInsets.only(
+                    bottom: 10,
+                  ),
+                  child: Dismissible(
+                    key: ValueKey(
+                      notification.id,
+                    ),
+                    direction:
+                        DismissDirection.endToStart,
+                    background: Container(
+                      alignment:
+                          Alignment.centerRight,
+                      padding:
+                          const EdgeInsets.only(
+                        right: 20,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                      ),
+                    ),
+                    confirmDismiss: (_) async {
+                      await _deleteNotification(
+                        notification,
+                      );
+
+                      return true;
+                    },
+                    child: ListTile(
+                      contentPadding:
+                          const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading:
+                          _notificationIcon(data),
+                      title: Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: isRead
+                              ? FontWeight.normal
+                              : FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding:
+                            const EdgeInsets.only(
+                          top: 5,
+                        ),
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              message,
+                              maxLines: 3,
+                              overflow:
+                                  TextOverflow.ellipsis,
+                            ),
+                            if (time.isNotEmpty) ...[
+                              const SizedBox(
+                                height: 5,
+                              ),
+                              Text(
+                                time,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors
+                                      .grey
+                                      .shade600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      trailing: isRead
+                          ? null
+                          : const Icon(
+                              Icons.circle,
+                              size: 10,
+                            ),
+                      onTap: () {
+                        if (!isRead) {
+                          _markAsRead(
+                            notification,
+                          );
+                        }
+                      },
+                    ),
+                  ),
                 );
               },
             ),
