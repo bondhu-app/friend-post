@@ -2,8 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import 'admin/admin_dashboard_screen.dart';
-
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
@@ -59,12 +57,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final user = _auth.currentUser;
 
-      final profileSnapshot = await _firestore
+      final snapshot = await _firestore
           .collection('users')
           .doc(uid)
           .get();
 
-      if (!profileSnapshot.exists) {
+      if (!snapshot.exists) {
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -73,7 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
 
-      final data = profileSnapshot.data() ?? {};
+      final data = snapshot.data() ?? {};
 
       final adminValue = data['isAdmin'];
 
@@ -91,9 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .trim();
 
       final String loadedEmail =
-          (data['email'] ??
-                  user?.email ??
-                  '')
+          (data['email'] ?? user?.email ?? '')
               .toString()
               .trim();
 
@@ -107,29 +103,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .trim();
 
       final String loadedBio =
-          (data['bio'] ?? '')
-              .toString()
-              .trim();
+          (data['bio'] ?? '').toString().trim();
 
       final String loadedLocation =
-          (data['location'] ?? '')
-              .toString()
-              .trim();
+          (data['location'] ?? '').toString().trim();
 
       final String loadedPhone =
-          (data['phone'] ?? '')
-              .toString()
-              .trim();
+          (data['phone'] ?? '').toString().trim();
 
       final String loadedWebsite =
-          (data['website'] ?? '')
-              .toString()
-              .trim();
+          (data['website'] ?? '').toString().trim();
 
       int loadedPosts = 0;
 
       try {
-        final postsSnapshot = await _firestore
+        final posts = await _firestore
             .collection('posts')
             .where(
               'userId',
@@ -137,10 +125,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             )
             .get();
 
-        loadedPosts = postsSnapshot.docs.length;
+        loadedPosts = posts.docs.length;
       } catch (_) {
         try {
-          final postsSnapshot = await _firestore
+          final posts = await _firestore
               .collection('posts')
               .where(
                 'uid',
@@ -148,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               )
               .get();
 
-          loadedPosts = postsSnapshot.docs.length;
+          loadedPosts = posts.docs.length;
         } catch (_) {
           loadedPosts = 0;
         }
@@ -156,18 +144,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       int loadedFriends = 0;
 
-      final friendCountValue =
-          data['friendCount'];
+      final friendValue = data['friendCount'];
 
-      if (friendCountValue is num) {
-        loadedFriends =
-            friendCountValue.toInt();
+      if (friendValue is num) {
+        loadedFriends = friendValue.toInt();
       } else {
         loadedFriends =
             int.tryParse(
-                  friendCountValue
-                          ?.toString() ??
-                      '',
+                  friendValue?.toString() ?? '',
                 ) ??
                 0;
       }
@@ -178,9 +162,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       setState(() {
         _isAdmin = adminStatus;
-        _name = loadedName.isEmpty
-            ? 'Friend'
-            : loadedName;
+        _name =
+            loadedName.isEmpty ? 'Friend' : loadedName;
         _email = loadedEmail;
         _photoUrl = loadedPhoto;
         _bio = loadedBio;
@@ -200,29 +183,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _isLoading = false;
       });
 
-      _showMessage(
-        'Could not load profile.',
-      );
+      _showMessage('Profile load failed.');
     }
-  }
-
-  Future<void> _openAdminDashboard() async {
-    if (!_isAdmin) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) =>
-            AdminDashboardScreen(),
-      ),
-    );
-  }
-
-  Future<void> _editProfile() async {
-    _showMessage(
-      'Profile editing is available from the Edit Profile option.',
-    );
   }
 
   void _showMessage(String message) {
@@ -237,13 +199,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _openAdminDashboard() async {
+    if (!_isAdmin) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const _AdminDashboardScreen(),
+      ),
+    );
+  }
+
   Widget _buildAvatar() {
     if (_photoUrl.isNotEmpty) {
       return CircleAvatar(
         radius: 58,
-        backgroundImage: NetworkImage(
-          _photoUrl,
-        ),
+        backgroundImage: NetworkImage(_photoUrl),
       );
     }
 
@@ -270,14 +242,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(
-            height: 4,
-          ),
+          const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
+              color: Colors.grey,
               fontSize: 15,
-              color: Colors.grey.shade700,
             ),
           ),
         ],
@@ -296,15 +266,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Card(
       elevation: 0,
-      margin: const EdgeInsets.only(
-        bottom: 10,
-      ),
       child: ListTile(
         leading: Icon(
           icon,
-          color: Theme.of(context)
-              .colorScheme
-              .primary,
+          color: Theme.of(context).colorScheme.primary,
         ),
         title: Text(
           title,
@@ -328,39 +293,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
         bottom: 12,
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(
-          16,
-        ),
+        borderRadius: BorderRadius.circular(16),
         onTap: _openAdminDashboard,
         child: Padding(
-          padding: const EdgeInsets.all(
-            18,
-          ),
+          padding: const EdgeInsets.all(18),
           child: Row(
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: 54,
+                height: 54,
                 decoration: BoxDecoration(
                   color: Theme.of(context)
                       .colorScheme
                       .primaryContainer,
                   borderRadius:
-                      BorderRadius.circular(
-                    14,
-                  ),
+                      BorderRadius.circular(15),
                 ),
                 child: Icon(
                   Icons.admin_panel_settings,
-                  size: 30,
+                  size: 32,
                   color: Theme.of(context)
                       .colorScheme
                       .onPrimaryContainer,
                 ),
               ),
-              const SizedBox(
-                width: 14,
-              ),
+              const SizedBox(width: 14),
               const Expanded(
                 child: Column(
                   crossAxisAlignment:
@@ -370,18 +327,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       'Admin Dashboard',
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight:
-                            FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    SizedBox(
-                      height: 4,
-                    ),
+                    SizedBox(height: 4),
                     Text(
                       'Manage Friend Post',
-                      style: TextStyle(
-                        fontSize: 13,
-                      ),
                     ),
                   ],
                 ),
@@ -418,9 +369,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           IconButton(
             onPressed: _loadProfile,
-            icon: const Icon(
-              Icons.refresh,
-            ),
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
@@ -429,15 +378,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: ListView(
           physics:
               const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(
-            16,
-          ),
+          padding: const EdgeInsets.all(16),
           children: [
             Card(
               elevation: 1,
               child: Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(
+                padding: const EdgeInsets.fromLTRB(
                   20,
                   24,
                   20,
@@ -446,60 +392,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   children: [
                     _buildAvatar(),
-                    const SizedBox(
-                      height: 16,
-                    ),
+                    const SizedBox(height: 16),
                     Text(
                       _name,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontSize: 28,
-                        fontWeight:
-                            FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     if (_email.isNotEmpty) ...[
-                      const SizedBox(
-                        height: 8,
-                      ),
+                      const SizedBox(height: 8),
                       Text(
                         _email,
-                        textAlign:
-                            TextAlign.center,
+                        textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 15,
-                          color:
-                              Colors.grey.shade700,
+                          color: Colors.grey.shade700,
                         ),
                       ),
                     ],
                     if (_isAdmin) ...[
-                      const SizedBox(
-                        height: 10,
-                      ),
+                      const SizedBox(height: 10),
                       Container(
                         padding:
-                            const EdgeInsets
-                                .symmetric(
-                          horizontal: 12,
+                            const EdgeInsets.symmetric(
+                          horizontal: 14,
                           vertical: 6,
                         ),
-                        decoration:
-                            BoxDecoration(
+                        decoration: BoxDecoration(
                           color: Theme.of(context)
                               .colorScheme
                               .primaryContainer,
                           borderRadius:
-                              BorderRadius
-                                  .circular(
-                            20,
-                          ),
+                              BorderRadius.circular(20),
                         ),
                         child: Text(
                           'ADMIN',
                           style: TextStyle(
-                            fontWeight:
-                                FontWeight.bold,
+                            fontWeight: FontWeight.bold,
                             color: Theme.of(context)
                                 .colorScheme
                                 .onPrimaryContainer,
@@ -507,9 +437,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ],
-                    const SizedBox(
-                      height: 22,
-                    ),
+                    const SizedBox(height: 22),
                     Row(
                       children: [
                         _buildStat(
@@ -527,20 +455,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            const SizedBox(
-              height: 14,
-            ),
+            const SizedBox(height: 14),
 
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: _editProfile,
-                icon: const Icon(
-                  Icons.edit,
-                ),
-                label: const Text(
-                  'Edit Profile',
-                ),
+                onPressed: () {
+                  _showMessage(
+                    'Edit Profile option is ready.',
+                  );
+                },
+                icon: const Icon(Icons.edit),
+                label: const Text('Edit Profile'),
                 style: OutlinedButton.styleFrom(
                   padding:
                       const EdgeInsets.symmetric(
@@ -549,19 +475,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   shape:
                       RoundedRectangleBorder(
                     borderRadius:
-                        BorderRadius.circular(
-                      30,
-                    ),
+                        BorderRadius.circular(30),
                   ),
                 ),
               ),
             ),
 
             _buildAdminCard(),
-
-            const SizedBox(
-              height: 8,
-            ),
 
             _buildInfoCard(
               Icons.info_outline,
@@ -590,43 +510,269 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Card(
               elevation: 0,
               child: ListTile(
-                leading: const Icon(
-                  Icons.article_outlined,
-                ),
+                leading:
+                    const Icon(Icons.article_outlined),
                 title: const Text(
                   'My Posts',
                   style: TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                subtitle: Text(
-                  '$_postCount posts',
-                ),
+                subtitle:
+                    Text('$_postCount posts'),
               ),
             ),
 
             Card(
               elevation: 0,
               child: ListTile(
-                leading: const Icon(
-                  Icons.people_outline,
-                ),
+                leading:
+                    const Icon(Icons.people_outline),
                 title: const Text(
                   'Friends',
                   style: TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                subtitle: Text(
-                  '$_friendCount friends',
-                ),
+                subtitle:
+                    Text('$_friendCount friends'),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+
+// ============================================================
+// ADMIN DASHBOARD
+// ============================================================
+
+class _AdminDashboardScreen extends StatefulWidget {
+  const _AdminDashboardScreen();
+
+  @override
+  State<_AdminDashboardScreen> createState() =>
+      _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState
+    extends State<_AdminDashboardScreen> {
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
+
+  bool _loading = true;
+
+  int _users = 0;
+  int _posts = 0;
+  int _withdrawRequests = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminData();
+  }
+
+  Future<void> _loadAdminData() async {
+    try {
+      final usersSnapshot =
+          await _firestore.collection('users').get();
+
+      final postsSnapshot =
+          await _firestore.collection('posts').get();
+
+      int withdrawCount = 0;
+
+      try {
+        final withdrawSnapshot =
+            await _firestore
+                .collection('withdraw_requests')
+                .where(
+                  'status',
+                  isEqualTo: 'pending',
+                )
+                .get();
+
+        withdrawCount =
+            withdrawSnapshot.docs.length;
+      } catch (_) {
+        withdrawCount = 0;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _users = usersSnapshot.docs.length;
+        _posts = postsSnapshot.docs.length;
+        _withdrawRequests = withdrawCount;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  Widget _statCard(
+    String title,
+    String value,
+    IconData icon,
+  ) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 25,
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Admin Dashboard',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _loadAdminData,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadAdminData,
+              child: ListView(
+                padding:
+                    const EdgeInsets.all(16),
+                children: [
+                  Card(
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 30,
+                            child: Icon(
+                              Icons.admin_panel_settings,
+                              size: 32,
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment
+                                      .start,
+                              children: [
+                                Text(
+                                  'Friend Post Admin',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight:
+                                        FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 5),
+                                Text(
+                                  'Administrator Panel',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  _statCard(
+                    'Total Users',
+                    _users.toString(),
+                    Icons.people,
+                  ),
+
+                  _statCard(
+                    'Total Posts',
+                    _posts.toString(),
+                    Icons.article,
+                  ),
+
+                  _statCard(
+                    'Pending Withdrawals',
+                    _withdrawRequests.toString(),
+                    Icons.account_balance_wallet,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.info_outline,
+                      ),
+                      title: const Text(
+                        'Admin Status',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'You are logged in as an administrator.',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }
