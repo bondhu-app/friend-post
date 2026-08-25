@@ -23,6 +23,7 @@ class _PostCardState extends State<PostCard> {
 
   bool _showComments = false;
   bool _working = false;
+  bool _commentWorking = false;
 
   @override
   void dispose() {
@@ -71,7 +72,6 @@ class _PostCardState extends State<PostCard> {
 
     if (timestamp is Timestamp) {
       final date = timestamp.toDate();
-
       final now = DateTime.now();
       final difference = now.difference(date);
 
@@ -97,10 +97,32 @@ class _PostCardState extends State<PostCard> {
     return 'এইমাত্র';
   }
 
+  void _showError(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
+  }
+
   Future<void> _toggleLike() async {
     if (_working) {
       return;
     }
+
+    final messenger = ScaffoldMessenger.of(context);
 
     setState(() {
       _working = true;
@@ -109,13 +131,11 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.likePost(_postId);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Like করা যায়নি: $e'),
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Like করা যায়নি: $e'),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -130,6 +150,8 @@ class _PostCardState extends State<PostCard> {
       return;
     }
 
+    final messenger = ScaffoldMessenger.of(context);
+
     setState(() {
       _working = true;
     });
@@ -137,21 +159,17 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.sharePost(_postId);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Post শেয়ার করা হয়েছে।'),
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Post শেয়ার করা হয়েছে।'),
+        ),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Share করা যায়নি: $e'),
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Share করা যায়নি: $e'),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -164,9 +182,15 @@ class _PostCardState extends State<PostCard> {
   Future<void> _addComment() async {
     final text = _commentController.text.trim();
 
-    if (text.isEmpty) {
+    if (text.isEmpty || _commentWorking) {
       return;
     }
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    setState(() {
+      _commentWorking = true;
+    });
 
     try {
       await _dataService.addComment(
@@ -176,26 +200,26 @@ class _PostCardState extends State<PostCard> {
 
       _commentController.clear();
 
-      if (mounted) {
-        FocusScope.of(context).unfocus();
-      }
+      FocusManager.instance.primaryFocus?.unfocus();
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text('Comment করা যায়নি: $e'),
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _commentWorking = false;
+        });
+      }
     }
   }
 
   Future<void> _deletePost() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Post মুছে ফেলবেন?'),
           content: const Text(
@@ -204,13 +228,13 @@ class _PostCardState extends State<PostCard> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context, false);
+                Navigator.of(dialogContext).pop(false);
               },
               child: const Text('না'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.pop(context, true);
+                Navigator.of(dialogContext).pop(true);
               },
               child: const Text('মুছে ফেলুন'),
             ),
@@ -223,16 +247,45 @@ class _PostCardState extends State<PostCard> {
       return;
     }
 
+    if (!mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
       await _dataService.deletePost(_postId);
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Post মুছে ফেলা হয়েছে।'),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
         SnackBar(
           content: Text('Post মুছে ফেলা যায়নি: $e'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteComment(String commentId) async {
+    if (_commentWorking) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      await _dataService.deleteComment(
+        postId: _postId,
+        commentId: commentId,
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Comment মুছতে সমস্যা: $e'),
         ),
       );
     }
@@ -252,10 +305,351 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
+  Widget _commentAvatar(String photoUrl) {
+    if (photoUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: 18,
+        backgroundImage: NetworkImage(photoUrl),
+      );
+    }
+
+    return const CircleAvatar(
+      radius: 18,
+      child: Icon(
+        Icons.person,
+        size: 20,
+      ),
+    );
+  }
+
+  Widget _buildCounts() {
+    return StreamBuilder<int>(
+      stream: _dataService.likeCountStream(_postId),
+      builder: (context, likeSnapshot) {
+        final likeCount = likeSnapshot.data ?? 0;
+
+        return StreamBuilder<int>(
+          stream: _dataService.commentCountStream(_postId),
+          builder: (context, commentSnapshot) {
+            final commentCount = commentSnapshot.data ?? 0;
+
+            return StreamBuilder<int>(
+              stream: _dataService.shareCountStream(_postId),
+              builder: (context, shareSnapshot) {
+                final shareCount = shareSnapshot.data ?? 0;
+
+                if (likeCount == 0 &&
+                    commentCount == 0 &&
+                    shareCount == 0) {
+                  return const SizedBox.shrink();
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    children: [
+                      if (likeCount > 0) ...[
+                        const Icon(
+                          Icons.favorite,
+                          size: 18,
+                          color: Colors.blue,
+                        ),
+                        const SizedBox(width: 5),
+                        Text('$likeCount'),
+                      ],
+                      const Spacer(),
+                      if (commentCount > 0)
+                        Text(
+                          '$commentCount comments',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      if (commentCount > 0 && shareCount > 0)
+                        const SizedBox(width: 12),
+                      if (shareCount > 0)
+                        Text(
+                          '$shareCount shares',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildLikeButton() {
+    return StreamBuilder<bool>(
+      stream: _dataService.likeStatusStream(_postId),
+      builder: (context, snapshot) {
+        final liked = snapshot.data ?? false;
+
+        return TextButton.icon(
+          onPressed: _working ? null : _toggleLike,
+          icon: Icon(
+            liked
+                ? Icons.favorite
+                : Icons.favorite_border,
+            color: liked
+                ? Colors.red
+                : Colors.grey.shade700,
+          ),
+          label: Text(
+            'Like',
+            style: TextStyle(
+              color: liked
+                  ? Colors.red
+                  : Colors.grey.shade700,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildShareButton() {
+    return StreamBuilder<bool>(
+      stream: _dataService.shareStatusStream(_postId),
+      builder: (context, snapshot) {
+        final shared = snapshot.data ?? false;
+
+        return TextButton.icon(
+          onPressed: _working ? null : _sharePost,
+          icon: Icon(
+            Icons.share_outlined,
+            color: shared
+                ? Colors.green
+                : Colors.grey.shade700,
+          ),
+          label: Text(
+            'Share',
+            style: TextStyle(
+              color: shared
+                  ? Colors.green
+                  : Colors.grey.shade700,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildComments() {
+    final currentUid = _dataService.currentUser?.uid;
+
+    return Column(
+      children: [
+        const Divider(),
+
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _dataService.commentsStream(_postId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState ==
+                ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.all(12),
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'Comment লোড করা যায়নি।',
+                  style: TextStyle(
+                    color: Colors.red,
+                  ),
+                ),
+              );
+            }
+
+            final comments = snapshot.data?.docs ?? [];
+
+            if (comments.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'এখনও কোনো Comment নেই।',
+                    style: TextStyle(
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return Column(
+              children: comments.map((comment) {
+                final data = comment.data();
+
+                final name =
+                    data['userName']?.toString().trim();
+
+                final commentText =
+                    data['text']?.toString() ?? '';
+
+                final userId =
+                    data['userId']?.toString() ?? '';
+
+                final photo =
+                    data['userPhotoUrl']?.toString() ?? '';
+
+                return Padding(
+                  padding: const EdgeInsets.only(
+                    bottom: 10,
+                  ),
+                  child: Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      _commentAvatar(photo),
+
+                      const SizedBox(width: 8),
+
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            borderRadius:
+                                BorderRadius.circular(14),
+                          ),
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      name != null &&
+                                              name.isNotEmpty
+                                          ? name
+                                          : 'Friend',
+                                      style:
+                                          const TextStyle(
+                                        fontWeight:
+                                            FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (userId == currentUid)
+                                    IconButton(
+                                      onPressed: () {
+                                        _deleteComment(
+                                          comment.id,
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 18,
+                                        color: Colors.red,
+                                      ),
+                                      padding:
+                                          EdgeInsets.zero,
+                                      constraints:
+                                          const BoxConstraints(
+                                        minWidth: 32,
+                                        minHeight: 32,
+                                      ),
+                                      tooltip:
+                                          'Delete Comment',
+                                    ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 4),
+
+                              Text(
+                                commentText,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+
+        const SizedBox(height: 8),
+
+        Row(
+          crossAxisAlignment:
+              CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _commentController,
+                minLines: 1,
+                maxLines: 4,
+                textInputAction:
+                    TextInputAction.newline,
+                decoration: InputDecoration(
+                  hintText: 'Comment লিখুন...',
+                  border: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(22),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            IconButton.filled(
+              onPressed:
+                  _commentWorking ? null : _addComment,
+              icon: _commentWorking
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.send),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUid = _dataService.currentUser?.uid;
-    final postOwnerUid = _data['userId']?.toString();
+    final postOwnerUid =
+        _data['userId']?.toString();
 
     return Card(
       margin: const EdgeInsets.only(
@@ -275,12 +669,19 @@ class _PostCardState extends State<PostCard> {
           10,
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
+            // =====================================================
+            // POST HEADER
+            // =====================================================
+
             Row(
               children: [
                 _avatar(),
+
                 const SizedBox(width: 12),
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
@@ -304,6 +705,7 @@ class _PostCardState extends State<PostCard> {
                     ],
                   ),
                 ),
+
                 if (currentUid != null &&
                     currentUid == postOwnerUid)
                   PopupMenuButton<String>(
@@ -314,7 +716,7 @@ class _PostCardState extends State<PostCard> {
                     },
                     itemBuilder: (context) {
                       return const [
-                        PopupMenuItem(
+                        PopupMenuItem<String>(
                           value: 'delete',
                           child: Row(
                             children: [
@@ -335,6 +737,10 @@ class _PostCardState extends State<PostCard> {
 
             const SizedBox(height: 16),
 
+            // =====================================================
+            // POST TEXT
+            // =====================================================
+
             if (_text.isNotEmpty)
               Text(
                 _text,
@@ -344,351 +750,56 @@ class _PostCardState extends State<PostCard> {
                 ),
               ),
 
-            const SizedBox(height: 14),
+            if (_text.isNotEmpty)
+              const SizedBox(height: 14),
 
-            StreamBuilder<int>(
-              stream: _dataService.likeCountStream(_postId),
-              builder: (context, likeSnapshot) {
-                final likeCount = likeSnapshot.data ?? 0;
+            // =====================================================
+            // COUNTS
+            // =====================================================
 
-                return StreamBuilder<int>(
-                  stream:
-                      _dataService.commentCountStream(_postId),
-                  builder: (context, commentSnapshot) {
-                    final commentCount =
-                        commentSnapshot.data ?? 0;
-
-                    return StreamBuilder<int>(
-                      stream:
-                          _dataService.shareCountStream(_postId),
-                      builder: (context, shareSnapshot) {
-                        final shareCount =
-                            shareSnapshot.data ?? 0;
-
-                        if (likeCount == 0 &&
-                            commentCount == 0 &&
-                            shareCount == 0) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 4,
-                          ),
-                          child: Row(
-                            children: [
-                              if (likeCount > 0) ...[
-                                const Icon(
-                                  Icons.favorite,
-                                  size: 18,
-                                  color: Colors.blue,
-                                ),
-                                const SizedBox(width: 5),
-                                Text('$likeCount'),
-                              ],
-                              const Spacer(),
-                              if (commentCount > 0)
-                                Text(
-                                  '$commentCount comments',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                              if (commentCount > 0 &&
-                                  shareCount > 0)
-                                const SizedBox(width: 12),
-                              if (shareCount > 0)
-                                Text(
-                                  '$shareCount shares',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+            _buildCounts(),
 
             const Divider(),
+
+            // =====================================================
+            // LIKE / COMMENT / SHARE
+            // =====================================================
 
             Row(
               children: [
                 Expanded(
-                  child: StreamBuilder<bool>(
-                    stream:
-                        _dataService.likeStatusStream(_postId),
-                    builder: (context, snapshot) {
-                      final liked = snapshot.data ?? false;
-
-                      return TextButton.icon(
-                        onPressed:
-                            _working ? null : _toggleLike,
-                        icon: Icon(
-                          liked
-                              ? Icons.favorite
-                              : Icons.favorite_border,
-                          color: liked
-                              ? Colors.red
-                              : Colors.grey.shade700,
-                        ),
-                        label: Text(
-                          'Like',
-                          style: TextStyle(
-                            color: liked
-                                ? Colors.red
-                                : Colors.grey.shade700,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  child: _buildLikeButton(),
                 ),
 
                 Expanded(
                   child: TextButton.icon(
                     onPressed: () {
                       setState(() {
-                        _showComments = !_showComments;
+                        _showComments =
+                            !_showComments;
                       });
                     },
                     icon: const Icon(
                       Icons.mode_comment_outlined,
                     ),
-                    label: const Text('Comment'),
+                    label: const Text(
+                      'Comment',
+                    ),
                   ),
                 ),
 
                 Expanded(
-                  child: StreamBuilder<bool>(
-                    stream:
-                        _dataService.shareStatusStream(_postId),
-                    builder: (context, snapshot) {
-                      final shared = snapshot.data ?? false;
-
-                      return TextButton.icon(
-                        onPressed:
-                            _working ? null : _sharePost,
-                        icon: Icon(
-                          Icons.share_outlined,
-                          color: shared
-                              ? Colors.green
-                              : Colors.grey.shade700,
-                        ),
-                        label: Text(
-                          'Share',
-                          style: TextStyle(
-                            color: shared
-                                ? Colors.green
-                                : Colors.grey.shade700,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  child: _buildShareButton(),
                 ),
               ],
             ),
 
-            if (_showComments) ...[
-              const Divider(),
+            // =====================================================
+            // COMMENTS
+            // =====================================================
 
-              StreamBuilder<
-                  QuerySnapshot<Map<String, dynamic>>>(
-                stream:
-                    _dataService.commentsStream(_postId),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState ==
-                      ConnectionState.waiting) {
-                    return const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Center(
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
-                  }
-
-                  final comments =
-                      snapshot.data?.docs ?? [];
-
-                  if (comments.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        'এখনও কোনো Comment নেই।',
-                        style: TextStyle(
-                          color: Colors.grey,
-                        ),
-                      ),
-                    );
-                  }
-
-                  return Column(
-                    children: comments.map((comment) {
-                      final data = comment.data();
-
-                      final name =
-                          data['userName']?.toString() ??
-                              'Friend';
-
-                      final text =
-                          data['text']?.toString() ?? '';
-
-                      final userId =
-                          data['userId']?.toString() ?? '';
-
-                      final photo =
-                          data['userPhotoUrl']?.toString() ??
-                              '';
-
-                      return Padding(
-                        padding:
-                            const EdgeInsets.only(bottom: 10),
-                        child: Row(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                          children: [
-                            if (photo.isNotEmpty)
-                              CircleAvatar(
-                                radius: 18,
-                                backgroundImage:
-                                    NetworkImage(photo),
-                              )
-                            else
-                              const CircleAvatar(
-                                radius: 18,
-                                child: Icon(
-                                  Icons.person,
-                                  size: 20,
-                                ),
-                              ),
-
-                            const SizedBox(width: 8),
-
-                            Expanded(
-                              child: Container(
-                                padding:
-                                    const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .surfaceContainerHighest,
-                                  borderRadius:
-                                      BorderRadius.circular(14),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            name,
-                                            style:
-                                                const TextStyle(
-                                              fontWeight:
-                                                  FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                        if (userId ==
-                                            currentUid)
-                                          InkWell(
-                                            onTap: () async {
-                                              try {
-                                                await _dataService
-                                                    .deleteComment(
-                                                  postId: _postId,
-                                                  commentId:
-                                                      comment.id,
-                                                );
-                                              } catch (e) {
-                                                if (!mounted) {
-                                                  return;
-                                                }
-
-                                                ScaffoldMessenger
-                                                    .of(context)
-                                                    .showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      'Comment মুছতে সমস্যা: $e',
-                                                    ),
-                                                  ),
-                                                );
-                                              }
-                                            },
-                                            child: const Icon(
-                                              Icons
-                                                  .delete_outline,
-                                              size: 18,
-                                              color: Colors.red,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-
-                                    const SizedBox(height: 4),
-
-                                    Text(
-                                      text,
-                                      style:
-                                          const TextStyle(
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 8),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _commentController,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction:
-                          TextInputAction.newline,
-                      decoration: InputDecoration(
-                        hintText: 'Comment লিখুন...',
-                        border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(22),
-                        ),
-                        contentPadding:
-                            const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  IconButton.filled(
-                    onPressed: _addComment,
-                    icon: const Icon(Icons.send),
-                  ),
-                ],
-              ),
-            ],
+            if (_showComments)
+              _buildComments(),
           ],
         ),
       ),
