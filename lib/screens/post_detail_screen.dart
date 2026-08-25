@@ -27,21 +27,18 @@ class _PostDetailScreenState
   final FirebaseAuth _auth =
       FirebaseAuth.instance;
 
-  bool _isDeleting = false;
   bool _isSharing = false;
+  bool _isDeleting = false;
 
   DocumentReference<Map<String, dynamic>>
       get _postReference => _firestore
           .collection('posts')
           .doc(widget.postId);
 
-  Stream<DocumentSnapshot<Map<String, dynamic>>>
-      get _postStream => _postReference.snapshots();
-
-  String _stringValue(
+  String _getString(
     Map<String, dynamic> data,
     List<String> keys, {
-    String fallback = '',
+    String defaultValue = '',
   }) {
     for (final key in keys) {
       final value = data[key];
@@ -52,10 +49,10 @@ class _PostDetailScreenState
       }
     }
 
-    return fallback;
+    return defaultValue;
   }
 
-  int _intValue(dynamic value) {
+  int _getInt(dynamic value) {
     if (value is int) {
       return value;
     }
@@ -98,10 +95,23 @@ class _PostDetailScreenState
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  Widget _buildAvatar(
-    String name,
-    String photoUrl,
-  ) {
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _buildAvatar({
+    required String name,
+    required String photoUrl,
+  }) {
     if (photoUrl.trim().isNotEmpty) {
       return CircleAvatar(
         radius: 24,
@@ -117,18 +127,11 @@ class _PostDetailScreenState
 
     return CircleAvatar(
       radius: 24,
-      backgroundColor:
-          Theme.of(context)
-              .colorScheme
-              .primaryContainer,
       child: Text(
         firstLetter,
-        style: TextStyle(
+        style: const TextStyle(
           fontWeight: FontWeight.bold,
-          color: Theme.of(context)
-              .colorScheme
-              .onPrimaryContainer,
-          fontSize: 20,
+          fontSize: 18,
         ),
       ),
     );
@@ -212,6 +215,10 @@ class _PostDetailScreenState
       return;
     }
 
+    if (_isDeleting) {
+      return;
+    }
+
     final confirmed =
         await showDialog<bool>(
       context: context,
@@ -246,4 +253,540 @@ class _PostDetailScreenState
             ),
           ],
         );
-     
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      final postSnapshot =
+          await _postReference.get();
+
+      if (!postSnapshot.exists) {
+        _showMessage(
+          'Post not found.',
+        );
+        return;
+      }
+
+      final data =
+          postSnapshot.data() ??
+              <String, dynamic>{};
+
+      final ownerId = _getString(
+        data,
+        [
+          'userId',
+          'uid',
+          'ownerId',
+        ],
+      );
+
+      if (ownerId != user.uid) {
+        _showMessage(
+          'You can only delete your own post.',
+        );
+        return;
+      }
+
+      await DataService.instance.deletePost(
+        widget.postId,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(
+        'Post deleted.',
+      );
+
+      Navigator.of(context).pop();
+    } on FirebaseException catch (e) {
+      _showMessage(
+        e.message ?? 'Could not delete post.',
+      );
+    } catch (e) {
+      debugPrint(
+        'Delete post error: $e',
+      );
+
+      _showMessage(
+        'Could not delete post.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildPostContent(
+    Map<String, dynamic> data,
+  ) {
+    final user =
+        _auth.currentUser;
+
+    final ownerId = _getString(
+      data,
+      [
+        'userId',
+        'uid',
+        'ownerId',
+      ],
+    );
+
+    final userName = _getString(
+      data,
+      [
+        'userName',
+        'name',
+        'authorName',
+      ],
+      defaultValue: 'Friend',
+    );
+
+    final photoUrl = _getString(
+      data,
+      [
+        'userPhotoUrl',
+        'photoUrl',
+        'authorPhotoUrl',
+      ],
+    );
+
+    final text = _getString(
+      data,
+      [
+        'text',
+        'content',
+        'description',
+      ],
+    );
+
+    final imageUrl = _getString(
+      data,
+      [
+        'imageUrl',
+        'mediaUrl',
+      ],
+    );
+
+    final createdAt =
+        data['createdAt'];
+
+    final likeCount = _getInt(
+      data['likeCount'],
+    );
+
+    final commentCount = _getInt(
+      data['commentCount'],
+    );
+
+    final shareCount = _getInt(
+      data['shareCount'],
+    );
+
+    final isOwner =
+        user != null &&
+            user.uid == ownerId;
+
+    return Column(
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
+      children: [
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding:
+                const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _buildAvatar(
+                      name: userName,
+                      photoUrl: photoUrl,
+                    ),
+                    const SizedBox(
+                      width: 12,
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            userName,
+                            style:
+                                const TextStyle(
+                              fontSize: 17,
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(
+                            height: 3,
+                          ),
+                          Text(
+                            _formatDate(
+                              createdAt,
+                            ),
+                            style:
+                                const TextStyle(
+                              color:
+                                  Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isOwner)
+                      PopupMenuButton<String>(
+                        onSelected:
+                            (value) {
+                          if (value ==
+                              'delete') {
+                            _deletePost();
+                          }
+                        },
+                        itemBuilder:
+                            (context) {
+                          return const [
+                            PopupMenuItem<
+                                String>(
+                              value:
+                                  'delete',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons
+                                        .delete_outline,
+                                  ),
+                                  SizedBox(
+                                    width: 8,
+                                  ),
+                                  Text(
+                                    'Delete Post',
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ];
+                        },
+                      ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                if (text.isNotEmpty)
+                  Text(
+                    text,
+                    style:
+                        const TextStyle(
+                      fontSize: 17,
+                      height: 1.5,
+                    ),
+                  ),
+
+                if (imageUrl.isNotEmpty)
+                  const SizedBox(
+                    height: 14,
+                  ),
+
+                if (imageUrl.isNotEmpty)
+                  ClipRRect(
+                    borderRadius:
+                        BorderRadius.circular(
+                      14,
+                    ),
+                    child: Image.network(
+                      imageUrl,
+                      width:
+                          double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder:
+                          (
+                        context,
+                        error,
+                        stackTrace,
+                      ) {
+                        return Container(
+                          width:
+                              double.infinity,
+                          height: 200,
+                          alignment:
+                              Alignment.center,
+                          decoration:
+                              BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            )
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            borderRadius:
+                                BorderRadius
+                                    .circular(
+                              14,
+                            ),
+                          ),
+                          child:
+                              const Text(
+                            'Image unavailable',
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                const SizedBox(
+                  height: 16,
+                ),
+
+                Row(
+                  children: [
+                    Text(
+                      '$likeCount likes',
+                    ),
+                    const SizedBox(
+                      width: 16,
+                    ),
+                    Text(
+                      '$commentCount comments',
+                    ),
+                    const SizedBox(
+                      width: 16,
+                    ),
+                    Text(
+                      '$shareCount shares',
+                    ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
+                const Divider(
+                  height: 1,
+                ),
+
+                const SizedBox(
+                  height: 6,
+                ),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child:
+                          StreamBuilder<bool>(
+                        stream:
+                            LikeService
+                                .instance
+                                .likedStream(
+                          widget.postId,
+                        ),
+                        builder:
+                            (
+                          context,
+                          snapshot,
+                        ) {
+                          final isLiked =
+                              snapshot.data ??
+                                  false;
+
+                          return TextButton.icon(
+                            onPressed:
+                                user == null
+                                    ? null
+                                    : _toggleLike,
+                            icon: Icon(
+                              isLiked
+                                  ? Icons.favorite
+                                  : Icons
+                                      .favorite_border,
+                              color: isLiked
+                                  ? Colors.red
+                                  : null,
+                            ),
+                            label: Text(
+                              isLiked
+                                  ? 'Liked'
+                                  : 'Like',
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child:
+                          TextButton.icon(
+                        onPressed: () {},
+                        icon:
+                            const Icon(
+                          Icons
+                              .comment_outlined,
+                        ),
+                        label:
+                            const Text(
+                          'Comment',
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child:
+                          TextButton.icon(
+                        onPressed:
+                            _isSharing
+                                ? null
+                                : _sharePost,
+                        icon: _isSharing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons
+                                    .share_outlined,
+                              ),
+                        label:
+                            const Text(
+                          'Share',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(
+          height: 24,
+        ),
+
+        CommentSection(
+          postId: widget.postId,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    if (widget.postId.trim().isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text(
+            'Post',
+          ),
+        ),
+        body: const Center(
+          child: Text(
+            'Invalid post.',
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Post',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      body: StreamBuilder<
+          DocumentSnapshot<
+              Map<String, dynamic>>>(
+        stream: _postReference.snapshots(),
+        builder: (
+          context,
+          snapshot,
+        ) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text(
+                'Could not load post.',
+              ),
+            );
+          }
+
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+            return const Center(
+              child:
+                  CircularProgressIndicator(),
+            );
+          }
+
+          final document =
+              snapshot.data;
+
+          if (document == null ||
+              !document.exists) {
+            return const Center(
+              child: Text(
+                'Post not found.',
+              ),
+            );
+          }
+
+          final data =
+              document.data();
+
+          if (data == null) {
+            return const Center(
+              child: Text(
+                'Post data unavailable.',
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              await _postReference.get();
+            },
+            child: ListView(
+              physics:
+                  const AlwaysScrollableScrollPhysics(),
+              padding:
+                  const EdgeInsets.all(16),
+              children: [
+                _buildPostContent(
+                  data,
+                ),
+                const SizedBox(
+                  height: 30,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
