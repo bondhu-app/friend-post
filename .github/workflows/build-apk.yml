@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ============================================================
-      # JAVA
+      # JAVA 17
       # ============================================================
 
       - name: Setup Java 17
@@ -45,10 +45,25 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Check Flutter
+      - name: Check Flutter, Dart and Java
         run: |
+          set -e
+
+          echo "========================================"
+          echo "FLUTTER"
+          echo "========================================"
           flutter --version
+
+          echo ""
+          echo "========================================"
+          echo "DART"
+          echo "========================================"
           dart --version
+
+          echo ""
+          echo "========================================"
+          echo "JAVA"
+          echo "========================================"
           java -version
 
       # ============================================================
@@ -78,7 +93,9 @@ jobs:
       # ============================================================
 
       - name: Get Flutter dependencies
-        run: flutter pub get
+        run: |
+          set -e
+          flutter pub get
 
       # ============================================================
       # REBUILD ANDROID PROJECT
@@ -113,25 +130,28 @@ jobs:
           echo "Fresh Flutter Android project created."
 
       # ============================================================
-      # CONFIGURE ANDROID
+      # CONFIGURE ANDROID SETTINGS
       # ============================================================
 
-      - name: Configure Android
+      - name: Configure Android plugins
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "CONFIGURING ANDROID"
+          echo "CONFIGURING ANDROID PLUGINS"
           echo "========================================"
 
-          if [ ! -f "android/settings.gradle.kts" ]; then
-            echo "ERROR: android/settings.gradle.kts not found."
+          SETTINGS="android/settings.gradle.kts"
+          APP="android/app/build.gradle.kts"
+
+          if [ ! -f "$SETTINGS" ]; then
+            echo "ERROR: $SETTINGS not found."
             exit 1
           fi
 
-          if [ ! -f "android/app/build.gradle.kts" ]; then
-            echo "ERROR: android/app/build.gradle.kts not found."
+          if [ ! -f "$APP" ]; then
+            echo "ERROR: $APP not found."
             exit 1
           fi
 
@@ -149,9 +169,9 @@ jobs:
           AGP_VERSION = "8.9.1"
           GOOGLE_SERVICES_VERSION = "4.4.3"
 
-          # ==========================================================
+          # ========================================================
           # SETTINGS.GRADLE.KTS
-          # ==========================================================
+          # ========================================================
 
           # Kotlin plugin
           kotlin_pattern = re.compile(
@@ -169,18 +189,18 @@ jobs:
               settings = kotlin_pattern.sub(
                   kotlin_line,
                   settings,
-                  count=1,
+                  count=1
               )
           else:
               if "plugins {" not in settings:
                   raise SystemExit(
-                      "ERROR: plugins block not found in settings.gradle.kts"
+                      "ERROR: plugins block not found."
                   )
 
               settings = settings.replace(
                   "plugins {",
                   "plugins {\n" + kotlin_line,
-                  1,
+                  1
               )
 
           # Android Gradle Plugin
@@ -199,18 +219,18 @@ jobs:
               settings = agp_pattern.sub(
                   agp_line,
                   settings,
-                  count=1,
+                  count=1
               )
           else:
               if "plugins {" not in settings:
                   raise SystemExit(
-                      "ERROR: plugins block not found for AGP"
+                      "ERROR: plugins block not found for AGP."
                   )
 
               settings = settings.replace(
                   "plugins {",
                   "plugins {\n" + agp_line,
-                  1,
+                  1
               )
 
           # Google Services
@@ -229,55 +249,166 @@ jobs:
               settings = google_pattern.sub(
                   google_line,
                   settings,
-                  count=1,
+                  count=1
               )
           else:
               settings = settings.replace(
                   "plugins {",
                   "plugins {\n" + google_line,
-                  1,
+                  1
               )
 
           settings_path.write_text(settings)
 
-          # ==========================================================
-          # APP BUILD.GRADLE.KTS
-          # ==========================================================
+          # ========================================================
+          # APP/BUILD.GRADLE.KTS
+          # ========================================================
 
           # Application ID
           app = re.sub(
               r'applicationId\s*=\s*["\'][^"\']+["\']',
               'applicationId = "com.friendpost.app"',
               app,
-              count=1,
+              count=1
           )
 
           # Google Services plugin
           if 'id("com.google.gms.google-services")' not in app:
               if "plugins {" not in app:
                   raise SystemExit(
-                      "ERROR: app plugins block not found"
+                      "ERROR: App plugins block not found."
                   )
 
               app = app.replace(
                   "plugins {",
                   "plugins {\n"
                   '    id("com.google.gms.google-services")',
-                  1,
+                  1
               )
 
           app_path.write_text(app)
 
           print("")
           print("========================================")
-          print("ANDROID CONFIGURATION COMPLETE")
+          print("ANDROID PLUGINS CONFIGURED")
           print("========================================")
-          print(f"Kotlin Plugin : {KOTLIN_VERSION}")
-          print(f"Android Plugin: {AGP_VERSION}")
-          print(f"Google Service: {GOOGLE_SERVICES_VERSION}")
-          print("Application ID: com.friendpost.app")
+          print(f"Kotlin          : {KOTLIN_VERSION}")
+          print(f"Android Gradle  : {AGP_VERSION}")
+          print(f"Google Services : {GOOGLE_SERVICES_VERSION}")
+          print("Application ID  : com.friendpost.app")
           print("========================================")
           PY
+
+      # ============================================================
+      # FIX KOTLIN 2.3 COMPILER OPTIONS
+      # ============================================================
+
+      - name: Configure Kotlin 2.3 compilerOptions
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING KOTLIN 2.3 COMPILER OPTIONS"
+          echo "========================================"
+
+          APP="android/app/build.gradle.kts"
+
+          if [ ! -f "$APP" ]; then
+            echo "ERROR: $APP not found."
+            exit 1
+          fi
+
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("android/app/build.gradle.kts")
+          text = path.read_text()
+
+          # ========================================================
+          # REMOVE OLD kotlinOptions BLOCK
+          #
+          # This fixes:
+          #
+          # Using 'jvmTarget: String' is an error.
+          # Please migrate to the compilerOptions DSL.
+          # ========================================================
+
+          old_block = re.compile(
+              r'\n\s*kotlinOptions\s*\{'
+              r'\s*jvmTarget\s*=\s*JavaVersion\.VERSION_\d+\.toString\(\)'
+              r'\s*\}',
+              re.MULTILINE
+          )
+
+          text, removed = old_block.subn("", text)
+
+          print(f"Old kotlinOptions blocks removed: {removed}")
+
+          # Also remove other old-style Kotlin jvmTarget assignments
+          old_target = re.compile(
+              r'\n\s*jvmTarget\s*=\s*["\'][^"\']+["\']'
+              r'\s*',
+              re.MULTILINE
+          )
+
+          text, removed_target = old_target.subn("", text)
+
+          print(
+              "Old jvmTarget assignments removed:",
+              removed_target
+          )
+
+          # ========================================================
+          # REMOVE OLD compilerOptions BLOCK IF ONE EXISTS
+          # ========================================================
+
+          old_compiler = re.compile(
+              r'\n\s*kotlin\s*\{\s*'
+              r'compilerOptions\s*\{.*?\}\s*'
+              r'\}',
+              re.DOTALL
+          )
+
+          text, old_compiler_count = old_compiler.subn("", text)
+
+          print(
+              "Existing compilerOptions blocks removed:",
+              old_compiler_count
+          )
+
+          # ========================================================
+          # ADD KOTLIN 2.3 COMPILER OPTIONS
+          # ========================================================
+
+          compiler_block = """
+          
+          kotlin {
+              compilerOptions {
+                  jvmTarget.set(
+                      org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+                  )
+              }
+          }
+          """
+
+          # Add the compilerOptions block at the end.
+          text = text.rstrip() + "\n" + compiler_block.strip() + "\n"
+
+          path.write_text(text)
+
+          print("")
+          print("Kotlin compilerOptions configured.")
+          print("JVM target: JVM_17")
+          PY
+
+          echo ""
+          echo "========================================"
+          echo "FINAL app/build.gradle.kts"
+          echo "========================================"
+
+          cat android/app/build.gradle.kts
 
       # ============================================================
       # VERIFY KOTLIN
@@ -289,85 +420,93 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "VERIFYING KOTLIN"
+          echo "VERIFYING KOTLIN CONFIGURATION"
           echo "========================================"
 
           echo ""
-          echo "Kotlin plugin configuration:"
+          echo "Kotlin plugin:"
           grep -n \
             "org.jetbrains.kotlin.android" \
             android/settings.gradle.kts
 
           echo ""
+          echo "Kotlin compilerOptions:"
+          grep -n -A8 -B2 \
+            "compilerOptions" \
+            android/app/build.gradle.kts
+
+          echo ""
+
+          grep -q \
+            'id("org.jetbrains.kotlin.android") version "2.3.0" apply false' \
+            android/settings.gradle.kts
+
+          grep -q \
+            "compilerOptions" \
+            android/app/build.gradle.kts
+
+          grep -q \
+            "JvmTarget.JVM_17" \
+            android/app/build.gradle.kts
 
           if grep -q \
-            'id("org.jetbrains.kotlin.android") version "2.3.0" apply false' \
-            android/settings.gradle.kts; then
+            "jvmTarget = JavaVersion.VERSION_11.toString()" \
+            android/app/build.gradle.kts; then
 
-            echo "SUCCESS: Kotlin 2.3.0 configured."
-
-          else
-
-            echo "ERROR: Kotlin 2.3.0 NOT found."
+            echo "ERROR: Old jvmTarget configuration still exists."
             exit 1
-
           fi
 
+          echo ""
+          echo "SUCCESS: Kotlin 2.3 compilerOptions configured."
+          echo "SUCCESS: JVM target is 17."
+          echo "SUCCESS: Old Kotlin DSL removed."
+
       # ============================================================
-      # VERIFY AGP
+      # VERIFY ANDROID PLUGINS
       # ============================================================
 
-      - name: Verify Android Gradle Plugin
+      - name: Verify Android plugins
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING ANDROID GRADLE PLUGIN"
+          echo "VERIFYING ANDROID PLUGINS"
           echo "========================================"
 
+          echo ""
+          echo "Android Gradle Plugin:"
           grep -n \
             "com.android.application" \
             android/settings.gradle.kts
 
           echo ""
-          echo "AGP configuration verified."
-
-      # ============================================================
-      # VERIFY GOOGLE SERVICES
-      # ============================================================
-
-      - name: Verify Google Services
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING GOOGLE SERVICES"
-          echo "========================================"
-
+          echo "Google Services:"
           grep -n \
             "google.gms.google-services" \
             android/settings.gradle.kts
 
+          echo ""
+          echo "App Google Services:"
           grep -n \
             "google.gms.google-services" \
             android/app/build.gradle.kts
 
           echo ""
-          echo "Google Services plugin verified."
+          echo "SUCCESS: Android plugins verified."
 
       # ============================================================
       # VERIFY FIREBASE PACKAGE
       # ============================================================
 
-      - name: Verify Firebase package
+      - name: Verify Firebase configuration
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING FIREBASE PACKAGE"
+          echo "VERIFYING FIREBASE CONFIGURATION"
           echo "========================================"
 
           echo ""
@@ -392,35 +531,39 @@ jobs:
             '"package_name": "com.friendpost.app"' \
             android/app/google-services.json
 
-          echo "SUCCESS: Firebase and Android package match."
+          echo ""
+          echo "SUCCESS: Android and Firebase package names match."
 
       # ============================================================
-      # VERIFY GRADLE WRAPPER
+      # VERIFY GRADLE
       # ============================================================
 
-      - name: Verify Gradle wrapper
+      - name: Verify Gradle project
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING GRADLE WRAPPER"
+          echo "VERIFYING GRADLE PROJECT"
           echo "========================================"
 
           test -f android/gradlew
+          test -f android/settings.gradle.kts
+          test -f android/build.gradle.kts
+          test -f android/app/build.gradle.kts
           test -f android/gradle/wrapper/gradle-wrapper.properties
 
           echo ""
-          echo "Gradle distribution:"
+          echo "Gradle wrapper:"
           grep \
             "distributionUrl" \
             android/gradle/wrapper/gradle-wrapper.properties
 
           echo ""
-          echo "Gradle wrapper verified."
+          echo "SUCCESS: Gradle project verified."
 
       # ============================================================
-      # CHECK V1 EMBEDDING
+      # CHECK ANDROID V1
       # ============================================================
 
       - name: Check Android V1 embedding
@@ -461,15 +604,11 @@ jobs:
           echo "VERIFYING ANDROID PROJECT"
           echo "========================================"
 
-          test -f android/gradlew
-          test -f android/settings.gradle.kts
-          test -f android/build.gradle.kts
-          test -f android/app/build.gradle.kts
           test -f android/app/src/main/AndroidManifest.xml
           test -f android/app/google-services.json
 
           echo ""
-          echo "Android project verification passed."
+          echo "SUCCESS: Android project verification passed."
 
       # ============================================================
       # FLUTTER ANALYZE
@@ -486,7 +625,7 @@ jobs:
           flutter analyze
 
       # ============================================================
-      # CLEAN BUILD
+      # CLEAN
       # ============================================================
 
       - name: Clean Flutter build
@@ -494,34 +633,36 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "CLEANING BUILD"
+          echo "CLEANING FLUTTER BUILD"
           echo "========================================"
 
           flutter clean
           flutter pub get
 
       # ============================================================
-      # FINAL CONFIGURATION CHECK
+      # CHECK FINAL KOTLIN CONFIGURATION
       # ============================================================
 
-      - name: Final Kotlin check before build
+      - name: Final Kotlin configuration check
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "FINAL KOTLIN CHECK"
+          echo "FINAL KOTLIN CONFIGURATION CHECK"
           echo "========================================"
-
-          echo ""
-          echo "settings.gradle.kts:"
-          cat android/settings.gradle.kts
 
           echo ""
           echo "Kotlin plugin:"
           grep \
             "org.jetbrains.kotlin.android" \
             android/settings.gradle.kts
+
+          echo ""
+          echo "Compiler options:"
+          grep -n -A8 -B2 \
+            "compilerOptions" \
+            android/app/build.gradle.kts
 
           echo ""
 
@@ -533,7 +674,24 @@ jobs:
             exit 1
           fi
 
-          echo "SUCCESS: Kotlin 2.3.0 is active before build."
+          if ! grep -q \
+            "JvmTarget.JVM_17" \
+            android/app/build.gradle.kts; then
+
+            echo "ERROR: JVM_17 compiler target not configured."
+            exit 1
+          fi
+
+          if grep -q \
+            "jvmTarget = JavaVersion.VERSION_11.toString()" \
+            android/app/build.gradle.kts; then
+
+            echo "ERROR: Old jvmTarget configuration detected."
+            exit 1
+          fi
+
+          echo ""
+          echo "SUCCESS: Final Kotlin configuration is correct."
 
       # ============================================================
       # BUILD RELEASE APK
