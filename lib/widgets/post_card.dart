@@ -71,7 +71,6 @@ class _PostCardState extends State<PostCard> {
 
     if (timestamp is Timestamp) {
       final date = timestamp.toDate();
-
       final now = DateTime.now();
       final difference = now.difference(date);
 
@@ -109,9 +108,7 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.likePost(_postId);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -139,9 +136,7 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.sharePost(_postId);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -149,9 +144,7 @@ class _PostCardState extends State<PostCard> {
         ),
       );
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -180,17 +173,13 @@ class _PostCardState extends State<PostCard> {
         text: text,
       );
 
-      if (!mounted) {
-        return;
-      }
-
       _commentController.clear();
 
-      FocusScope.of(context).unfocus();
-    } catch (e) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        FocusScope.of(context).unfocus();
       }
+    } catch (e) {
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -203,7 +192,7 @@ class _PostCardState extends State<PostCard> {
   Future<void> _deletePost() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
+      builder: (context) {
         return AlertDialog(
           title: const Text('Post মুছে ফেলবেন?'),
           content: const Text(
@@ -212,13 +201,13 @@ class _PostCardState extends State<PostCard> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop(false);
+                Navigator.pop(context, false);
               },
               child: const Text('না'),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop(true);
+                Navigator.pop(context, true);
               },
               child: const Text('মুছে ফেলুন'),
             ),
@@ -234,36 +223,11 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.deletePost(_postId);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Post মুছে ফেলা যায়নি: $e'),
-        ),
-      );
-    }
-  }
-
-  Future<void> _deleteComment(String commentId) async {
-    // context ব্যবহার await-এর আগে নেওয়া হয়েছে।
-    // এতে use_build_context_synchronously warning হবে না।
-    final messenger = ScaffoldMessenger.of(context);
-
-    try {
-      await _dataService.deleteComment(
-        postId: _postId,
-        commentId: commentId,
-      );
-    } catch (e) {
-      if (!mounted || !messenger.mounted) {
-        return;
-      }
-
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Comment মুছতে সমস্যা: $e'),
         ),
       );
     }
@@ -283,94 +247,9 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  Widget _buildComment({
-    required DocumentSnapshot<Map<String, dynamic>> comment,
-    required String? currentUid,
-  }) {
-    final data = comment.data();
-
-    final name = data?['userName']?.toString() ?? 'Friend';
-
-    final text = data?['text']?.toString() ?? '';
-
-    final userId = data?['userId']?.toString() ?? '';
-
-    final photo = data?['userPhotoUrl']?.toString() ?? '';
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (photo.isNotEmpty)
-            CircleAvatar(
-              radius: 18,
-              backgroundImage: NetworkImage(photo),
-            )
-          else
-            const CircleAvatar(
-              radius: 18,
-              child: Icon(
-                Icons.person,
-                size: 20,
-              ),
-            ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Theme.of(context)
-                    .colorScheme
-                    .surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      if (userId == currentUid)
-                        InkWell(
-                          onTap: () {
-                            _deleteComment(comment.id);
-                          },
-                          child: const Icon(
-                            Icons.delete_outline,
-                            size: 18,
-                            color: Colors.red,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    text,
-                    style: const TextStyle(
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentUid = _dataService.currentUser?.uid;
-
     final postOwnerUid = _data['userId']?.toString();
 
     return Card(
@@ -480,15 +359,13 @@ class _PostCardState extends State<PostCard> {
                 final likeCount = likeSnapshot.data ?? 0;
 
                 return StreamBuilder<int>(
-                  stream:
-                      _dataService.commentCountStream(_postId),
+                  stream: _dataService.commentCountStream(_postId),
                   builder: (context, commentSnapshot) {
                     final commentCount =
                         commentSnapshot.data ?? 0;
 
                     return StreamBuilder<int>(
-                      stream:
-                          _dataService.shareCountStream(_postId),
+                      stream: _dataService.shareCountStream(_postId),
                       builder: (context, shareSnapshot) {
                         final shareCount =
                             shareSnapshot.data ?? 0;
@@ -514,7 +391,9 @@ class _PostCardState extends State<PostCard> {
                                 const SizedBox(width: 5),
                                 Text('$likeCount'),
                               ],
+
                               const Spacer(),
+
                               if (commentCount > 0)
                                 Text(
                                   '$commentCount comments',
@@ -522,9 +401,11 @@ class _PostCardState extends State<PostCard> {
                                     color: Colors.grey.shade700,
                                   ),
                                 ),
+
                               if (commentCount > 0 &&
                                   shareCount > 0)
                                 const SizedBox(width: 12),
+
                               if (shareCount > 0)
                                 Text(
                                   '$shareCount shares',
@@ -550,10 +431,10 @@ class _PostCardState extends State<PostCard> {
 
             Row(
               children: [
+                // LIKE
                 Expanded(
                   child: StreamBuilder<bool>(
-                    stream:
-                        _dataService.likeStatusStream(_postId),
+                    stream: _dataService.likeStatusStream(_postId),
                     builder: (context, snapshot) {
                       final liked = snapshot.data ?? false;
 
@@ -570,6 +451,9 @@ class _PostCardState extends State<PostCard> {
                         ),
                         label: Text(
                           'Like',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: liked
                                 ? Colors.red
@@ -580,6 +464,8 @@ class _PostCardState extends State<PostCard> {
                     },
                   ),
                 ),
+
+                // COMMENT
                 Expanded(
                   child: TextButton.icon(
                     onPressed: () {
@@ -590,13 +476,19 @@ class _PostCardState extends State<PostCard> {
                     icon: const Icon(
                       Icons.mode_comment_outlined,
                     ),
-                    label: const Text('Comment'),
+                    label: const Text(
+                      'Comment',
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
+
+                // SHARE
                 Expanded(
                   child: StreamBuilder<bool>(
-                    stream:
-                        _dataService.shareStatusStream(_postId),
+                    stream: _dataService.shareStatusStream(_postId),
                     builder: (context, snapshot) {
                       final shared = snapshot.data ?? false;
 
@@ -611,6 +503,9 @@ class _PostCardState extends State<PostCard> {
                         ),
                         label: Text(
                           'Share',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: shared
                                 ? Colors.green
@@ -633,8 +528,7 @@ class _PostCardState extends State<PostCard> {
 
               StreamBuilder<
                   QuerySnapshot<Map<String, dynamic>>>(
-                stream:
-                    _dataService.commentsStream(_postId),
+                stream: _dataService.commentsStream(_postId),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState ==
                       ConnectionState.waiting) {
@@ -642,18 +536,6 @@ class _PostCardState extends State<PostCard> {
                       padding: EdgeInsets.all(12),
                       child: Center(
                         child: CircularProgressIndicator(),
-                      ),
-                    );
-                  }
-
-                  if (snapshot.hasError) {
-                    return Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        'Comment লোড করা যায়নি: ${snapshot.error}',
-                        style: const TextStyle(
-                          color: Colors.red,
-                        ),
                       ),
                     );
                   }
@@ -675,9 +557,129 @@ class _PostCardState extends State<PostCard> {
 
                   return Column(
                     children: comments.map((comment) {
-                      return _buildComment(
-                        comment: comment,
-                        currentUid: currentUid,
+                      final data = comment.data();
+
+                      final name =
+                          data['userName']?.toString() ??
+                              'Friend';
+
+                      final text =
+                          data['text']?.toString() ?? '';
+
+                      final userId =
+                          data['userId']?.toString() ?? '';
+
+                      final photo =
+                          data['userPhotoUrl']?.toString() ??
+                              '';
+
+                      return Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            if (photo.isNotEmpty)
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundImage:
+                                    NetworkImage(photo),
+                              )
+                            else
+                              const CircleAvatar(
+                                radius: 18,
+                                child: Icon(
+                                  Icons.person,
+                                  size: 20,
+                                ),
+                              ),
+
+                            const SizedBox(width: 8),
+
+                            Expanded(
+                              child: Container(
+                                padding:
+                                    const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
+                                  borderRadius:
+                                      BorderRadius.circular(14),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            name,
+                                            maxLines: 1,
+                                            overflow:
+                                                TextOverflow.ellipsis,
+                                            style:
+                                                const TextStyle(
+                                              fontWeight:
+                                                  FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+
+                                        if (userId ==
+                                            currentUid)
+                                          InkWell(
+                                            onTap: () async {
+                                              try {
+                                                await _dataService
+                                                    .deleteComment(
+                                                  postId: _postId,
+                                                  commentId:
+                                                      comment.id,
+                                                );
+                                              } catch (e) {
+                                                if (!mounted) {
+                                                  return;
+                                                }
+
+                                                ScaffoldMessenger
+                                                    .of(context)
+                                                    .showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'Comment মুছতে সমস্যা: $e',
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            child: const Icon(
+                                              Icons
+                                                  .delete_outline,
+                                              size: 18,
+                                              color: Colors.red,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+
+                                    const SizedBox(height: 4),
+
+                                    Text(
+                                      text,
+                                      style:
+                                          const TextStyle(
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       );
                     }).toList(),
                   );
@@ -713,7 +715,9 @@ class _PostCardState extends State<PostCard> {
                       ),
                     ),
                   ),
+
                   const SizedBox(width: 8),
+
                   IconButton.filled(
                     onPressed: _addComment,
                     icon: const Icon(Icons.send),
