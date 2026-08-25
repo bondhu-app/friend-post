@@ -51,11 +51,7 @@ class _CommentSectionState extends State<CommentSection> {
 
     final text = _commentController.text.trim();
 
-    if (text.isEmpty) {
-      return;
-    }
-
-    if (_isSending) {
+    if (text.isEmpty || _isSending) {
       return;
     }
 
@@ -77,7 +73,8 @@ class _CommentSectionState extends State<CommentSection> {
       }
 
       final postData =
-          postSnapshot.data() ?? <String, dynamic>{};
+          postSnapshot.data() ??
+              <String, dynamic>{};
 
       final postOwnerId =
           (postData['uid'] ??
@@ -94,16 +91,26 @@ class _CommentSectionState extends State<CommentSection> {
       final commentReference =
           _comments.doc();
 
-      final commentData = <String, dynamic>{
-        'commentId': commentReference.id,
-        'postId': widget.postId,
-        'userId': user.uid,
-        'uid': user.uid,
-        'userName': userName,
-        'userPhotoUrl': '',
-        'photoUrl': '',
-        'text': text,
-        'content': text,
+      final commentData =
+          <String, dynamic>{
+        'commentId':
+            commentReference.id,
+        'postId':
+            widget.postId,
+        'userId':
+            user.uid,
+        'uid':
+            user.uid,
+        'userName':
+            userName,
+        'userPhotoUrl':
+            '',
+        'photoUrl':
+            '',
+        'text':
+            text,
+        'content':
+            text,
         'createdAt':
             FieldValue.serverTimestamp(),
         'updatedAt':
@@ -111,7 +118,9 @@ class _CommentSectionState extends State<CommentSection> {
       };
 
       final currentCommentCount =
-          _toInt(postData['commentCount']);
+          _toInt(
+        postData['commentCount'],
+      );
 
       final batch =
           _firestore.batch();
@@ -135,22 +144,26 @@ class _CommentSectionState extends State<CommentSection> {
 
       _commentController.clear();
 
-      // ----------------------------------------------------------
+      // ==========================================================
       // COMMENT NOTIFICATION
-      // ----------------------------------------------------------
-      // নিজের পোস্টে নিজে কমেন্ট করলে notification যাবে না।
+      // ==========================================================
       if (postOwnerId.isNotEmpty &&
           postOwnerId != user.uid) {
         try {
           await NotificationService.instance
               .notifyComment(
-            receiverId: postOwnerId,
-            senderId: user.uid,
-            senderName: userName,
-            commentText: text,
+            receiverId:
+                postOwnerId,
+            senderId:
+                user.uid,
+            senderName:
+                userName,
+            postId:
+                widget.postId,
+            commentText:
+                text,
           );
         } catch (e) {
-          // Notification ব্যর্থ হলেও comment সফল থাকবে।
           debugPrint(
             'Comment notification error: $e',
           );
@@ -161,7 +174,9 @@ class _CommentSectionState extends State<CommentSection> {
         return;
       }
 
-      _showMessage('Comment added.');
+      _showMessage(
+        'Comment added.',
+      );
     } on FirebaseException catch (e) {
       _showMessage(
         e.message ??
@@ -264,7 +279,9 @@ class _CommentSectionState extends State<CommentSection> {
         return;
       }
 
-      _showMessage('Comment deleted.');
+      _showMessage(
+        'Comment deleted.',
+      );
     } on FirebaseException catch (e) {
       _showMessage(
         e.message ??
@@ -281,28 +298,37 @@ class _CommentSectionState extends State<CommentSection> {
     }
   }
 
-  void _showMessage(String message) {
+  void _showMessage(
+    String message,
+  ) {
     if (!mounted) {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
+        content:
+            Text(message),
+        behavior:
+            SnackBarBehavior.floating,
       ),
     );
   }
 
-  String _formatDate(dynamic value) {
+  String _formatDate(
+    dynamic value,
+  ) {
     if (value is! Timestamp) {
       return 'Just now';
     }
 
-    final date = value.toDate();
+    final date =
+        value.toDate();
 
     final difference =
-        DateTime.now().difference(date);
+        DateTime.now()
+            .difference(date);
 
     if (difference.inSeconds < 60) {
       return 'Just now';
@@ -344,7 +370,8 @@ class _CommentSectionState extends State<CommentSection> {
   }
 
   Widget _buildComment(
-    DocumentSnapshot<Map<String, dynamic>>
+    DocumentSnapshot<
+            Map<String, dynamic>>
         document,
   ) {
     final data =
@@ -386,14 +413,17 @@ class _CommentSectionState extends State<CommentSection> {
             currentUser.uid == userId;
 
     return Padding(
-      padding: const EdgeInsets.only(
+      padding:
+          const EdgeInsets.only(
         bottom: 14,
       ),
       child: Row(
         crossAxisAlignment:
             CrossAxisAlignment.start,
         children: [
-          _buildAvatar(photoUrl),
+          _buildAvatar(
+            photoUrl,
+          ),
 
           const SizedBox(
             width: 10,
@@ -429,10 +459,12 @@ class _CommentSectionState extends State<CommentSection> {
                       ),
 
                       if (canDelete)
-                        PopupMenuButton<String>(
+                        PopupMenuButton<
+                            String>(
                           padding:
                               EdgeInsets.zero,
-                          iconSize: 20,
+                          iconSize:
+                              20,
                           onSelected:
                               (value) {
                             if (value ==
@@ -494,7 +526,8 @@ class _CommentSectionState extends State<CommentSection> {
                     ),
                     style:
                         const TextStyle(
-                      color: Colors.grey,
+                      color:
+                          Colors.grey,
                       fontSize: 11,
                     ),
                   ),
@@ -507,7 +540,9 @@ class _CommentSectionState extends State<CommentSection> {
     );
   }
 
-  int _toInt(dynamic value) {
+  int _toInt(
+    dynamic value,
+  ) {
     if (value is int) {
       return value;
     }
@@ -517,7 +552,8 @@ class _CommentSectionState extends State<CommentSection> {
     }
 
     return int.tryParse(
-          value?.toString() ?? '',
+          value?.toString() ??
+              '',
         ) ??
         0;
   }
@@ -534,7 +570,8 @@ class _CommentSectionState extends State<CommentSection> {
           'Comments',
           style: TextStyle(
             fontSize: 19,
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
 
@@ -587,7 +624,8 @@ class _CommentSectionState extends State<CommentSection> {
             }
 
             final comments =
-                snapshot.data?.docs ?? [];
+                snapshot.data?.docs ??
+                    [];
 
             if (comments.isEmpty) {
               return const Padding(
@@ -629,7 +667,8 @@ class _CommentSectionState extends State<CommentSection> {
                 maxLines: 4,
                 textInputAction:
                     TextInputAction.newline,
-                enabled: !_isSending,
+                enabled:
+                    !_isSending,
                 decoration:
                     InputDecoration(
                   hintText:
@@ -659,9 +698,10 @@ class _CommentSectionState extends State<CommentSection> {
               height: 52,
               width: 52,
               child: IconButton(
-                onPressed: _isSending
-                    ? null
-                    : _sendComment,
+                onPressed:
+                    _isSending
+                        ? null
+                        : _sendComment,
                 style:
                     IconButton.styleFrom(
                   backgroundColor:
@@ -683,7 +723,8 @@ class _CommentSectionState extends State<CommentSection> {
                         ),
                       )
                     : const Icon(
-                        Icons.send_rounded,
+                        Icons
+                            .send_rounded,
                       ),
               ),
             ),
