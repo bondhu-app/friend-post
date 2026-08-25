@@ -108,23 +108,19 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.likePost(_postId);
     } catch (e) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Like করা যায়নি: $e'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Like করা যায়নি: $e'),
-        ),
-      );
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _working = false;
+        });
       }
-
-      setState(() {
-        _working = false;
-      });
     }
   }
 
@@ -140,33 +136,27 @@ class _PostCardState extends State<PostCard> {
     try {
       await _dataService.sharePost(_postId);
 
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Post শেয়ার করা হয়েছে।'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Post শেয়ার করা হয়েছে।'),
-        ),
-      );
     } catch (e) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Share করা যায়নি: $e'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Share করা যায়নি: $e'),
-        ),
-      );
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          _working = false;
+        });
       }
-
-      setState(() {
-        _working = false;
-      });
     }
   }
 
@@ -183,23 +173,18 @@ class _PostCardState extends State<PostCard> {
         text: text,
       );
 
-      if (!mounted) {
-        return;
+      if (mounted) {
+        _commentController.clear();
+        FocusScope.of(context).unfocus();
       }
-
-      _commentController.clear();
-
-      FocusScope.of(context).unfocus();
     } catch (e) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Comment করা যায়নি: $e'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Comment করা যায়নি: $e'),
-        ),
-      );
     }
   }
 
@@ -230,36 +215,28 @@ class _PostCardState extends State<PostCard> {
       },
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    if (confirmed != true) {
+    if (!mounted || confirmed != true) {
       return;
     }
 
     try {
       await _dataService.deletePost(_postId);
 
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Post মুছে ফেলা হয়েছে।'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Post মুছে ফেলা হয়েছে।'),
-        ),
-      );
     } catch (e) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Post মুছে ফেলা যায়নি: $e'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Post মুছে ফেলা যায়নি: $e'),
-        ),
-      );
     }
   }
 
@@ -272,25 +249,21 @@ class _PostCardState extends State<PostCard> {
         commentId: commentId,
       );
 
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Comment মুছে ফেলা হয়েছে।'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Comment মুছে ফেলা হয়েছে।'),
-        ),
-      );
     } catch (e) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Comment মুছতে সমস্যা: $e'),
+          ),
+        );
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Comment মুছতে সমস্যা: $e'),
-        ),
-      );
     }
   }
 
@@ -408,7 +381,6 @@ class _PostCardState extends State<PostCard> {
             },
           ),
         ),
-
         Expanded(
           child: TextButton.icon(
             onPressed: () {
@@ -427,7 +399,6 @@ class _PostCardState extends State<PostCard> {
             ),
           ),
         ),
-
         Expanded(
           child: StreamBuilder<bool>(
             stream: _dataService.shareStatusStream(_postId),
@@ -571,7 +542,6 @@ class _PostCardState extends State<PostCard> {
                                       ),
                                     ),
                                   ),
-
                                   if (userId == currentUid)
                                     InkWell(
                                       onTap: () {
@@ -588,9 +558,7 @@ class _PostCardState extends State<PostCard> {
                                     ),
                                 ],
                               ),
-
                               const SizedBox(height: 4),
-
                               Text(
                                 text,
                                 style: const TextStyle(
@@ -634,9 +602,7 @@ class _PostCardState extends State<PostCard> {
                 ),
               ),
             ),
-
             const SizedBox(width: 8),
-
             IconButton.filled(
               onPressed: _addComment,
               icon: const Icon(Icons.send),
@@ -673,16 +639,10 @@ class _PostCardState extends State<PostCard> {
           crossAxisAlignment:
               CrossAxisAlignment.start,
           children: [
-            // ======================================================
-            // POST HEADER
-            // ======================================================
-
             Row(
               children: [
                 _avatar(),
-
                 const SizedBox(width: 12),
-
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
@@ -706,7 +666,6 @@ class _PostCardState extends State<PostCard> {
                     ],
                   ),
                 ),
-
                 if (currentUid != null &&
                     currentUid == postOwnerUid)
                   PopupMenuButton<String>(
@@ -738,10 +697,6 @@ class _PostCardState extends State<PostCard> {
 
             const SizedBox(height: 16),
 
-            // ======================================================
-            // POST TEXT
-            // ======================================================
-
             if (_text.isNotEmpty)
               Text(
                 _text,
@@ -753,23 +708,11 @@ class _PostCardState extends State<PostCard> {
 
             const SizedBox(height: 14),
 
-            // ======================================================
-            // COUNTS
-            // ======================================================
-
             _buildCounts(),
 
             const Divider(),
 
-            // ======================================================
-            // ACTION BUTTONS
-            // ======================================================
-
             _buildActionButtons(),
-
-            // ======================================================
-            // COMMENTS
-            // ======================================================
 
             _buildComments(),
           ],
