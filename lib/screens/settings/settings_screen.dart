@@ -2,38 +2,177 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({
+    super.key,
+  });
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  State<SettingsScreen> createState() =>
+      _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+class _SettingsScreenState
+    extends State<SettingsScreen> {
+  final FirebaseAuth _auth =
+      FirebaseAuth.instance;
 
   bool _notificationsEnabled = true;
+  bool _darkModeEnabled = false;
+  bool _privateAccountEnabled = false;
 
-  Future<void> _logout() async {
-    final confirmed = await showDialog<bool>(
+  User? get _currentUser => _auth.currentUser;
+
+  String get _userName {
+    final user = _currentUser;
+
+    if (user == null) {
+      return 'Friend';
+    }
+
+    final name =
+        user.displayName?.trim() ?? '';
+
+    if (name.isNotEmpty) {
+      return name;
+    }
+
+    return 'Friend';
+  }
+
+  String get _userEmail {
+    return _currentUser?.email ?? '';
+  }
+
+  String get _photoUrl {
+    return _currentUser?.photoURL ?? '';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Widget _buildProfileAvatar() {
+    if (_photoUrl.trim().isNotEmpty) {
+      return CircleAvatar(
+        radius: 32,
+        backgroundImage: NetworkImage(
+          _photoUrl,
+        ),
+      );
+    }
+
+    return const CircleAvatar(
+      radius: 32,
+      child: Icon(
+        Icons.person,
+        size: 34,
+      ),
+    );
+  }
+
+  void _showAboutDialog() {
+    showAboutDialog(
       context: context,
-      builder: (context) {
+      applicationName: 'Friend Post',
+      applicationVersion: '1.0.0',
+      applicationLegalese:
+          '© Friend Post',
+      children: const [
+        SizedBox(
+          height: 16,
+        ),
+        Text(
+          'Friend Post is a social networking application where users can connect with friends, create posts, like, comment and share.',
+        ),
+      ],
+    );
+  }
+
+  Future<void> _changePassword() async {
+    final user = _currentUser;
+
+    if (user == null) {
+      _showMessage(
+        'Please login first.',
+      );
+      return;
+    }
+
+    final email = user.email;
+
+    if (email == null ||
+        email.trim().isEmpty) {
+      _showMessage(
+        'No email address is available for this account.',
+      );
+      return;
+    }
+
+    try {
+      await _auth.sendPasswordResetEmail(
+        email: email,
+      );
+
+      _showMessage(
+        'Password reset email sent.',
+      );
+    } on FirebaseAuthException catch (e) {
+      _showMessage(
+        e.message ??
+            'Could not send password reset email.',
+      );
+    } catch (e) {
+      debugPrint(
+        'Password reset error: $e',
+      );
+
+      _showMessage(
+        'Could not send password reset email.',
+      );
+    }
+  }
+
+  Future<void> _signOut() async {
+    final confirmed =
+        await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Logout'),
+          title: const Text(
+            'Log Out',
+          ),
           content: const Text(
-            'আপনি কি Friend Post থেকে Logout করতে চান?',
+            'Are you sure you want to log out?',
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context, false);
+                Navigator.of(
+                  dialogContext,
+                ).pop(false);
               },
-              child: const Text('না'),
+              child: const Text(
+                'Cancel',
+              ),
             ),
             FilledButton(
               onPressed: () {
-                Navigator.pop(context, true);
+                Navigator.of(
+                  dialogContext,
+                ).pop(true);
               },
-              child: const Text('Logout'),
+              child: const Text(
+                'Log Out',
+              ),
             ),
           ],
         );
@@ -51,102 +190,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
 
-      // Auth state listener থাকলে অ্যাপ নিজে থেকেই Login screen-এ যাবে।
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Logout সফল হয়েছে।'),
-        ),
+      Navigator.of(context).popUntil(
+        (route) => route.isFirst,
+      );
+    } on FirebaseAuthException catch (e) {
+      _showMessage(
+        e.message ??
+            'Could not log out.',
       );
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      debugPrint(
+        'Logout error: $e',
+      );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Logout করা যায়নি: $e'),
-        ),
+      _showMessage(
+        'Could not log out.',
       );
     }
   }
 
-  void _showNotifications() {
-    showModalBottomSheet<void>(
+  void _showPrivacyInfo() {
+    showDialog<void>(
       context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  20,
-                  8,
-                  20,
-                  24,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Notifications',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Push Notifications',
-                      ),
-                      subtitle: const Text(
-                        'নতুন Like, Comment ও Friend activity-এর notification',
-                      ),
-                      value: _notificationsEnabled,
-                      onChanged: (value) {
-                        setSheetState(() {
-                          _notificationsEnabled = value;
-                        });
-
-                        setState(() {
-                          _notificationsEnabled = value;
-                        });
-                      },
-                      secondary: const Icon(
-                        Icons.notifications_outlined,
-                      ),
-                    ),
-                  ],
-                ),
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Privacy',
+          ),
+          content: const SingleChildScrollView(
+            child: Text(
+              'Your account information is stored securely using Firebase services. '
+              'Your profile and posts are controlled by the privacy settings available in Friend Post.',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(
+                  dialogContext,
+                ).pop();
+              },
+              child: const Text(
+                'Close',
               ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showPrivacy() {
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Privacy'),
-          content: const Text(
-            'আপনার Profile ও Post-এর privacy settings এখানে '
-            'পরবর্তীতে আরও বিস্তারিতভাবে নিয়ন্ত্রণ করা যাবে।',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('ঠিক আছে'),
             ),
           ],
         );
@@ -154,23 +240,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showSecurity() {
+  void _showHelpDialog() {
     showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Security'),
-          content: const Text(
-            'আপনার Account Firebase Authentication দ্বারা '
-            'সুরক্ষিত। Password পরিবর্তন ও অন্যান্য security '
-            'options এখানে পরবর্তীতে যোগ করা যাবে।',
+          title: const Text(
+            'Help & Support',
+          ),
+          content: const SingleChildScrollView(
+            child: Text(
+              'If you are having a problem with Friend Post, '
+              'please check your internet connection and make sure you are logged in. '
+              'You can also restart the application and try again.',
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.of(
+                  dialogContext,
+                ).pop();
               },
-              child: const Text('ঠিক আছে'),
+              child: const Text(
+                'Close',
+              ),
             ),
           ],
         );
@@ -178,196 +272,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showAbout() {
-    showAboutDialog(
-      context: context,
-      applicationName: 'Friend Post',
-      applicationVersion: '1.0.0',
-      applicationLegalese: '© 2026 Friend Post',
-      children: const [
-        SizedBox(height: 16),
-        Text(
-          'Friend Post একটি সামাজিক যোগাযোগের অ্যাপ। '
-          'এখানে আপনি Post, Like, Comment, Share এবং '
-          'Friends-এর সঙ্গে যোগাযোগ করতে পারবেন।',
+  Widget _buildSectionTitle(
+    String title,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(
+        left: 4,
+        top: 20,
+        bottom: 8,
+      ),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context)
+              .colorScheme
+              .primary,
         ),
-      ],
+      ),
     );
   }
 
-  Widget _settingTile({
+  Widget _buildSettingsCard({
+    required List<Widget> children,
+  }) {
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: children,
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return const Divider(
+      height: 1,
+      indent: 72,
+    );
+  }
+
+  Widget _buildSettingTile({
     required IconData icon,
     required String title,
-    String? subtitle,
-    required VoidCallback onTap,
-    Color? iconColor,
+    required String subtitle,
+    VoidCallback? onTap,
+    Widget? trailing,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 18,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 30,
-              color: iconColor ??
-                  Theme.of(context).colorScheme.onSurface,
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              size: 30,
-              color: Colors.grey.shade700,
-            ),
-          ],
+    return ListTile(
+      contentPadding:
+          const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 4,
+      ),
+      leading: CircleAvatar(
+        radius: 21,
+        child: Icon(
+          icon,
+          size: 21,
         ),
       ),
-    );
-  }
-
-  Widget _divider() {
-    return Divider(
-      height: 1,
-      thickness: 1,
-      color: Colors.grey.shade300,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      // ============================================================
-      // SINGLE SETTINGS TITLE
-      // ============================================================
-
-      appBar: AppBar(
-        title: const Text(
-          'Settings',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: false,
-      ),
-
-      // ============================================================
-      // SETTINGS CONTENT
-      // ============================================================
-
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            16,
-            20,
-            16,
-            30,
-          ),
-          child: Column(
-            children: [
-              // ====================================================
-              // SETTINGS CARD
-              // ====================================================
-
-              Card(
-                margin: EdgeInsets.zero,
-                elevation: 1,
-                clipBehavior: Clip.antiAlias,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    _settingTile(
-                      icon: Icons.notifications_outlined,
-                      title: 'Notifications',
-                      subtitle: _notificationsEnabled
-                          ? 'Notifications চালু আছে'
-                          : 'Notifications বন্ধ আছে',
-                      onTap: _showNotifications,
-                    ),
-
-                    _divider(),
-
-                    _settingTile(
-                      icon: Icons.lock_outline,
-                      title: 'Privacy',
-                      onTap: _showPrivacy,
-                    ),
-
-                    _divider(),
-
-                    _settingTile(
-                      icon: Icons.security_outlined,
-                      title: 'Security',
-                      onTap: _showSecurity,
-                    ),
-
-                    _divider(),
-
-                    _settingTile(
-                      icon: Icons.info_outline,
-                      title: 'About Friend Post',
-                      onTap: _showAbout,
-                    ),
-
-                    _divider(),
-
-                    _settingTile(
-                      icon: Icons.logout,
-                      title: 'Logout',
-                      onTap: _logout,
-                      iconColor: Colors.red,
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // ====================================================
-              // VERSION
-              // ====================================================
-
-              Text(
-                'Friend Post • Version 1.0.0',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
         ),
       ),
-    );
-  }
-}
+      subtitle: Padding(
+        padding: const EdgeInsets.only(
+          top: 3,
+        ),
+        child: Text(
+          subtitle,
+        ),
+      ),
+      trailing: trailing ??
+          const Icon(trailing
