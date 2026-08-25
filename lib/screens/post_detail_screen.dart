@@ -1,26 +1,73 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../services/data_service.dart';
+import '../services/like_service.dart';
 import '../widgets/comment_section.dart';
-import '../widgets/like_button.dart';
 
-class PostDetailScreen extends StatelessWidget {
-  PostDetailScreen({
+class PostDetailScreen extends StatefulWidget {
+  const PostDetailScreen({
     super.key,
     required this.postId,
   });
 
   final String postId;
 
+  @override
+  State<PostDetailScreen> createState() =>
+      _PostDetailScreenState();
+}
+
+class _PostDetailScreenState
+    extends State<PostDetailScreen> {
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
 
-  Future<DocumentSnapshot<Map<String, dynamic>>>
-      _loadPost() {
-    return _firestore
-        .collection('posts')
-        .doc(postId)
-        .get();
+  final FirebaseAuth _auth =
+      FirebaseAuth.instance;
+
+  bool _isDeleting = false;
+  bool _isSharing = false;
+
+  DocumentReference<Map<String, dynamic>>
+      get _postReference => _firestore
+          .collection('posts')
+          .doc(widget.postId);
+
+  Stream<DocumentSnapshot<Map<String, dynamic>>>
+      get _postStream => _postReference.snapshots();
+
+  String _stringValue(
+    Map<String, dynamic> data,
+    List<String> keys, {
+    String fallback = '',
+  }) {
+    for (final key in keys) {
+      final value = data[key];
+
+      if (value is String &&
+          value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+
+    return fallback;
+  }
+
+  int _intValue(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
   }
 
   String _formatDate(dynamic value) {
@@ -29,7 +76,6 @@ class PostDetailScreen extends StatelessWidget {
     }
 
     final date = value.toDate();
-
     final difference =
         DateTime.now().difference(date);
 
@@ -52,7 +98,10 @@ class PostDetailScreen extends StatelessWidget {
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  Widget _buildAvatar(String photoUrl) {
+  Widget _buildAvatar(
+    String name,
+    String photoUrl,
+  ) {
     if (photoUrl.trim().isNotEmpty) {
       return CircleAvatar(
         radius: 24,
@@ -61,294 +110,140 @@ class PostDetailScreen extends StatelessWidget {
       );
     }
 
-    return const CircleAvatar(
-      radius: 24,
-      child: Icon(
-        Icons.person,
-      ),
-    );
-  }
+    final firstLetter =
+        name.trim().isNotEmpty
+            ? name.trim()[0].toUpperCase()
+            : 'F';
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Post',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+    return CircleAvatar(
+      radius: 24,
+      backgroundColor:
+          Theme.of(context)
+              .colorScheme
+              .primaryContainer,
+      child: Text(
+        firstLetter,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context)
+              .colorScheme
+              .onPrimaryContainer,
+          fontSize: 20,
         ),
       ),
-      body: FutureBuilder<
-          DocumentSnapshot<Map<String, dynamic>>>(
-        future: _loadPost(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'Could not load this post.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
-
-          if (snapshot.connectionState ==
-              ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          final document = snapshot.data;
-
-          if (document == null ||
-              !document.exists) {
-            return const Center(
-              child: Text(
-                'Post not found.',
-              ),
-            );
-          }
-
-          final data =
-              document.data() ?? {};
-
-          final postIdValue = document.id;
-
-          final userName =
-              (data['userName'] ??
-                      data['name'] ??
-                      'Friend')
-                  .toString();
-
-          final userPhotoUrl =
-              (data['userPhotoUrl'] ??
-                      data['photoUrl'] ??
-                      '')
-                  .toString();
-
-          final text =
-              (data['text'] ??
-                      data['content'] ??
-                      data['description'] ??
-                      '')
-                  .toString();
-
-          final imageUrl =
-              (data['imageUrl'] ??
-                      data['image'] ??
-                      '')
-                  .toString();
-
-          final createdAt =
-              data['createdAt'];
-
-          final commentCount =
-              _toInt(
-            data['commentCount'],
-          );
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Card(
-                  clipBehavior:
-                      Clip.antiAlias,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            _buildAvatar(
-                              userPhotoUrl,
-                            ),
-                            const SizedBox(
-                              width: 12,
-                            ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment
-                                        .start,
-                                children: [
-                                  Text(
-                                    userName,
-                                    style:
-                                        const TextStyle(
-                                      fontWeight:
-                                          FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(
-                                    height: 3,
-                                  ),
-                                  Text(
-                                    _formatDate(
-                                      createdAt,
-                                    ),
-                                    style:
-                                        const TextStyle(
-                                      color:
-                                          Colors.grey,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(
-                          height: 16,
-                        ),
-
-                        if (text.isNotEmpty)
-                          Text(
-                            text,
-                            style:
-                                const TextStyle(
-                              fontSize: 16,
-                              height: 1.45,
-                            ),
-                          ),
-
-                        if (text.isNotEmpty &&
-                            imageUrl.isNotEmpty)
-                          const SizedBox(
-                            height: 14,
-                          ),
-
-                        if (imageUrl.isNotEmpty)
-                          ClipRRect(
-                            borderRadius:
-                                BorderRadius.circular(
-                              12,
-                            ),
-                            child: Image.network(
-                              imageUrl,
-                              width:
-                                  double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder:
-                                  (
-                                context,
-                                error,
-                                stackTrace,
-                              ) {
-                                return Container(
-                                  width:
-                                      double.infinity,
-                                  height: 220,
-                                  alignment:
-                                      Alignment.center,
-                                  child:
-                                      const Icon(
-                                    Icons
-                                        .broken_image_outlined,
-                                    size: 50,
-                                  ),
-                                );
-                              },
-                              loadingBuilder:
-                                  (
-                                context,
-                                child,
-                                loadingProgress,
-                              ) {
-                                if (loadingProgress ==
-                                    null) {
-                                  return child;
-                                }
-
-                                return Container(
-                                  width:
-                                      double.infinity,
-                                  height: 220,
-                                  alignment:
-                                      Alignment.center,
-                                  child:
-                                      const CircularProgressIndicator(),
-                                );
-                              },
-                            ),
-                          ),
-
-                        const SizedBox(
-                          height: 12,
-                        ),
-
-                        const Divider(),
-
-                        Row(
-                          children: [
-                            LikeButton(
-                              postId:
-                                  postIdValue,
-                            ),
-                            const SizedBox(
-                              width: 8,
-                            ),
-                            Text(
-                              '$commentCount comments',
-                              style:
-                                  const TextStyle(
-                                color:
-                                    Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(
-                  height: 20,
-                ),
-
-                Card(
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.all(16),
-                    child: CommentSection(
-                      postId: postIdValue,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
     );
   }
 
-  int _toInt(dynamic value) {
-    if (value is int) {
-      return value;
-    }
+  Future<void> _toggleLike() async {
+    try {
+      await LikeService.instance.toggleLike(
+        postId: widget.postId,
+      );
+    } on FirebaseException catch (e) {
+      _showMessage(
+        e.message ?? 'Could not update like.',
+      );
+    } catch (e) {
+      debugPrint(
+        'Toggle like error: $e',
+      );
 
-    if (value is num) {
-      return value.toInt();
+      _showMessage(
+        'Could not update like.',
+      );
     }
-
-    return int.tryParse(
-          value?.toString() ?? '',
-        ) ??
-        0;
   }
-}
+
+  Future<void> _sharePost() async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      _showMessage(
+        'Please login first.',
+      );
+      return;
+    }
+
+    if (_isSharing) {
+      return;
+    }
+
+    setState(() {
+      _isSharing = true;
+    });
+
+    try {
+      await DataService.instance.sharePost(
+        widget.postId,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(
+        'Post shared successfully.',
+      );
+    } on FirebaseException catch (e) {
+      _showMessage(
+        e.message ?? 'Could not share post.',
+      );
+    } catch (e) {
+      debugPrint(
+        'Share post error: $e',
+      );
+
+      _showMessage(
+        'Could not share post.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSharing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deletePost() async {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      return;
+    }
+
+    final confirmed =
+        await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Delete Post',
+          ),
+          content: const Text(
+            'Are you sure you want to delete this post?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(
+                  dialogContext,
+                ).pop(false);
+              },
+              child: const Text(
+                'Cancel',
+              ),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(
+                  dialogContext,
+                ).pop(true);
+              },
+              child: const Text(
+                'Delete',
+              ),
+            ),
+          ],
+        );
+     
