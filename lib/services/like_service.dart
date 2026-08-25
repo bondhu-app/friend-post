@@ -6,8 +6,7 @@ import 'notification_service.dart';
 class LikeService {
   LikeService._();
 
-  static final LikeService instance =
-      LikeService._();
+  static final LikeService instance = LikeService._();
 
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
@@ -15,9 +14,8 @@ class LikeService {
   final FirebaseAuth _auth =
       FirebaseAuth.instance;
 
-  CollectionReference<Map<String, dynamic>>
-      get _posts =>
-          _firestore.collection('posts');
+  CollectionReference<Map<String, dynamic>> get _posts =>
+      _firestore.collection('posts');
 
   Future<bool> isLiked(String postId) async {
     final user = _auth.currentUser;
@@ -39,7 +37,7 @@ class LikeService {
     final user = _auth.currentUser;
 
     if (user == null || postId.isEmpty) {
-      return Stream.value(false);
+      return Stream<bool>.value(false);
     }
 
     return _posts
@@ -50,11 +48,9 @@ class LikeService {
         .map((snapshot) => snapshot.exists);
   }
 
-  Stream<int> likeCountStream(
-    String postId,
-  ) {
+  Stream<int> likeCountStream(String postId) {
     if (postId.isEmpty) {
-      return Stream.value(0);
+      return Stream<int>.value(0);
     }
 
     return _posts
@@ -67,8 +63,7 @@ class LikeService {
         return 0;
       }
 
-      final value =
-          data['likeCount'];
+      final value = data['likeCount'];
 
       if (value is int) {
         return value;
@@ -104,15 +99,13 @@ class LikeService {
       );
     }
 
-    final postReference =
-        _posts.doc(postId);
+    final postReference = _posts.doc(postId);
 
     final likeReference = postReference
         .collection('likes')
         .doc(user.uid);
 
-    final postSnapshot =
-        await postReference.get();
+    final postSnapshot = await postReference.get();
 
     if (!postSnapshot.exists) {
       throw FirebaseException(
@@ -121,31 +114,24 @@ class LikeService {
       );
     }
 
-    final postData =
-        postSnapshot.data() ?? {};
+    final postData = postSnapshot.data() ?? <String, dynamic>{};
 
-    final ownerId =
-        (postData['uid'] ??
-                postData['userId'] ??
-                postData['ownerId'] ??
-                '')
-            .toString();
+    final ownerId = (
+      postData['uid'] ??
+      postData['userId'] ??
+      postData['ownerId'] ??
+      ''
+    ).toString();
 
-    final likeSnapshot =
-        await likeReference.get();
+    final likeSnapshot = await likeReference.get();
 
-    final batch =
-        _firestore.batch();
+    final batch = _firestore.batch();
 
     final currentLikeCount =
-        _toInt(
-      postData['likeCount'],
-    );
+        _toInt(postData['likeCount']);
 
     if (likeSnapshot.exists) {
-      batch.delete(
-        likeReference,
-      );
+      batch.delete(likeReference);
 
       batch.update(
         postReference,
@@ -172,8 +158,7 @@ class LikeService {
       batch.update(
         postReference,
         {
-          'likeCount':
-              currentLikeCount + 1,
+          'likeCount': currentLikeCount + 1,
           'updatedAt':
               FieldValue.serverTimestamp(),
         },
@@ -182,12 +167,19 @@ class LikeService {
 
     await batch.commit();
 
+    // নতুন Like হলে পোস্ট মালিককে notification পাঠানো হবে।
     if (!likeSnapshot.exists &&
         ownerId.isNotEmpty &&
         ownerId != user.uid) {
-      await NotificationService.instance
-          .notifyLike(
-        postOwnerId: ownerId,
+      final senderName =
+          user.displayName?.trim().isNotEmpty == true
+              ? user.displayName!.trim()
+              : 'Friend';
+
+      await NotificationService.instance.notifyLike(
+        receiverId: ownerId,
+        senderId: user.uid,
+        senderName: senderName,
         postId: postId,
       );
     }
@@ -209,45 +201,38 @@ class LikeService {
       return;
     }
 
-    final postReference =
-        _posts.doc(postId);
+    final postReference = _posts.doc(postId);
 
-    final likeReference =
-        postReference
-            .collection('likes')
-            .doc(user.uid);
+    final likeReference = postReference
+        .collection('likes')
+        .doc(user.uid);
 
-    final likeSnapshot =
-        await likeReference.get();
+    final likeSnapshot = await likeReference.get();
 
     if (likeSnapshot.exists) {
       return;
     }
 
-    final postSnapshot =
-        await postReference.get();
+    final postSnapshot = await postReference.get();
 
     if (!postSnapshot.exists) {
       return;
     }
 
     final postData =
-        postSnapshot.data() ?? {};
+        postSnapshot.data() ?? <String, dynamic>{};
 
-    final ownerId =
-        (postData['uid'] ??
-                postData['userId'] ??
-                postData['ownerId'] ??
-                '')
-            .toString();
+    final ownerId = (
+      postData['uid'] ??
+      postData['userId'] ??
+      postData['ownerId'] ??
+      ''
+    ).toString();
 
     final currentLikeCount =
-        _toInt(
-      postData['likeCount'],
-    );
+        _toInt(postData['likeCount']);
 
-    final batch =
-        _firestore.batch();
+    final batch = _firestore.batch();
 
     batch.set(
       likeReference,
@@ -262,8 +247,7 @@ class LikeService {
     batch.update(
       postReference,
       {
-        'likeCount':
-            currentLikeCount + 1,
+        'likeCount': currentLikeCount + 1,
         'updatedAt':
             FieldValue.serverTimestamp(),
       },
@@ -273,9 +257,15 @@ class LikeService {
 
     if (ownerId.isNotEmpty &&
         ownerId != user.uid) {
-      await NotificationService.instance
-          .notifyLike(
-        postOwnerId: ownerId,
+      final senderName =
+          user.displayName?.trim().isNotEmpty == true
+              ? user.displayName!.trim()
+              : 'Friend';
+
+      await NotificationService.instance.notifyLike(
+        receiverId: ownerId,
+        senderId: user.uid,
+        senderName: senderName,
         postId: postId,
       );
     }
@@ -286,43 +276,37 @@ class LikeService {
   }) async {
     final user = _auth.currentUser;
 
-    if (user == null ||
-        postId.isEmpty) {
+    if (user == null || postId.isEmpty) {
       return;
     }
 
-    final postReference =
-        _posts.doc(postId);
+    final postReference = _posts.doc(postId);
 
-    final likeReference =
-        postReference
-            .collection('likes')
-            .doc(user.uid);
+    final likeReference = postReference
+        .collection('likes')
+        .doc(user.uid);
 
-    final likeSnapshot =
-        await likeReference.get();
+    final likeSnapshot = await likeReference.get();
 
     if (!likeSnapshot.exists) {
       return;
     }
 
-    final postSnapshot =
-        await postReference.get();
+    final postSnapshot = await postReference.get();
+
+    if (!postSnapshot.exists) {
+      return;
+    }
 
     final postData =
-        postSnapshot.data() ?? {};
+        postSnapshot.data() ?? <String, dynamic>{};
 
     final currentLikeCount =
-        _toInt(
-      postData['likeCount'],
-    );
+        _toInt(postData['likeCount']);
 
-    final batch =
-        _firestore.batch();
+    final batch = _firestore.batch();
 
-    batch.delete(
-      likeReference,
-    );
+    batch.delete(likeReference);
 
     batch.update(
       postReference,
