@@ -16,7 +16,7 @@ class NotificationService {
   User? get currentUser => _auth.currentUser;
 
   // ============================================================
-  // NOTIFICATION COLLECTION
+  // USER NOTIFICATIONS COLLECTION
   // ============================================================
 
   CollectionReference<Map<String, dynamic>>
@@ -41,15 +41,14 @@ class NotificationService {
     String? senderPhotoUrl,
     String? postId,
   }) async {
-    final currentUid = _auth.currentUser?.uid;
-
-    // নিজের জন্য notification তৈরি করবে না।
-    if (currentUid != null &&
-        currentUid == receiverId) {
+    if (receiverId.trim().isEmpty) {
       return;
     }
 
-    if (receiverId.trim().isEmpty) {
+    final uid = _auth.currentUser?.uid;
+
+    // নিজের কাজের জন্য নিজেকে notification দেওয়া হবে না।
+    if (uid != null && uid == receiverId) {
       return;
     }
 
@@ -59,75 +58,31 @@ class NotificationService {
       'type': type,
       'read': false,
       'isRead': false,
-      'createdAt':
-          FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
     };
 
     if (senderId != null &&
         senderId.trim().isNotEmpty) {
-      data['senderId'] = senderId;
+      data['senderId'] = senderId.trim();
     }
 
     if (senderName != null &&
         senderName.trim().isNotEmpty) {
-      data['senderName'] = senderName;
+      data['senderName'] = senderName.trim();
     }
 
     if (senderPhotoUrl != null &&
         senderPhotoUrl.trim().isNotEmpty) {
-      data['senderPhotoUrl'] = senderPhotoUrl;
+      data['senderPhotoUrl'] =
+          senderPhotoUrl.trim();
     }
 
     if (postId != null &&
         postId.trim().isNotEmpty) {
-      data['postId'] = postId;
+      data['postId'] = postId.trim();
     }
 
     await _userNotifications(receiverId).add(data);
-  }
-
-  // ============================================================
-  // FRIEND REQUEST NOTIFICATION
-  // ============================================================
-
-  Future<void> friendRequestNotification({
-    required String receiverId,
-    required String senderId,
-    required String senderName,
-    String senderPhotoUrl = '',
-  }) async {
-    await createNotification(
-      receiverId: receiverId,
-      senderId: senderId,
-      senderName: senderName,
-      senderPhotoUrl: senderPhotoUrl,
-      type: 'friend_request',
-      title: 'Friend Request',
-      message:
-          '$senderName আপনাকে Friend Request পাঠিয়েছে।',
-    );
-  }
-
-  // ============================================================
-  // FRIEND ACCEPTED NOTIFICATION
-  // ============================================================
-
-  Future<void> friendAcceptedNotification({
-    required String receiverId,
-    required String senderId,
-    required String senderName,
-    String senderPhotoUrl = '',
-  }) async {
-    await createNotification(
-      receiverId: receiverId,
-      senderId: senderId,
-      senderName: senderName,
-      senderPhotoUrl: senderPhotoUrl,
-      type: 'friend_accepted',
-      title: 'Friend Request Accepted',
-      message:
-          '$senderName আপনার Friend Request গ্রহণ করেছে।',
-    );
   }
 
   // ============================================================
@@ -155,6 +110,30 @@ class NotificationService {
   }
 
   // ============================================================
+  // OLD / COMPATIBLE LIKE METHOD
+  // ============================================================
+  //
+  // like_service.dart বর্তমানে এই method ব্যবহার করছে।
+  // তাই এটি রাখা হয়েছে।
+  //
+
+  Future<void> notifyLike({
+    required String receiverId,
+    required String senderId,
+    required String senderName,
+    required String postId,
+    String senderPhotoUrl = '',
+  }) async {
+    await likeNotification(
+      receiverId: receiverId,
+      senderId: senderId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+      postId: postId,
+    );
+  }
+
+  // ============================================================
   // COMMENT NOTIFICATION
   // ============================================================
 
@@ -172,13 +151,11 @@ class NotificationService {
     final text = commentText.trim();
 
     if (text.isNotEmpty) {
-      final shortText =
-          text.length > 80
-              ? '${text.substring(0, 80)}...'
-              : text;
+      final shortText = text.length > 80
+          ? '${text.substring(0, 80)}...'
+          : text;
 
-      message =
-          '$senderName: $shortText';
+      message = '$senderName: $shortText';
     }
 
     await createNotification(
@@ -190,6 +167,76 @@ class NotificationService {
       type: 'comment',
       title: 'New Comment',
       message: message,
+    );
+  }
+
+  // ============================================================
+  // OLD / COMPATIBLE COMMENT METHOD
+  // ============================================================
+  //
+  // comment_section.dart বর্তমানে এই method ব্যবহার করছে।
+  // তাই এটি রাখা হয়েছে।
+  //
+
+  Future<void> notifyComment({
+    required String receiverId,
+    required String senderId,
+    required String senderName,
+    required String postId,
+    required String commentText,
+    String senderPhotoUrl = '',
+  }) async {
+    await commentNotification(
+      receiverId: receiverId,
+      senderId: senderId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+      postId: postId,
+      commentText: commentText,
+    );
+  }
+
+  // ============================================================
+  // FRIEND REQUEST
+  // ============================================================
+
+  Future<void> friendRequestNotification({
+    required String receiverId,
+    required String senderId,
+    required String senderName,
+    String senderPhotoUrl = '',
+  }) async {
+    await createNotification(
+      receiverId: receiverId,
+      senderId: senderId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+      type: 'friend_request',
+      title: 'Friend Request',
+      message:
+          '$senderName আপনাকে Friend Request পাঠিয়েছে।',
+    );
+  }
+
+  // ============================================================
+  // FRIEND ACCEPTED
+  // ============================================================
+
+  Future<void> friendAcceptedNotification({
+    required String receiverId,
+    required String senderId,
+    required String senderName,
+    String senderPhotoUrl = '',
+  }) async {
+    await createNotification(
+      receiverId: receiverId,
+      senderId: senderId,
+      senderName: senderName,
+      senderPhotoUrl: senderPhotoUrl,
+      type: 'friend_accepted',
+      title: 'Friend Request Accepted',
+      message:
+          '$senderName আপনার Friend Request গ্রহণ করেছে।',
     );
   }
 
@@ -292,7 +339,10 @@ class NotificationService {
 
     final snapshot =
         await _userNotifications(uid)
-            .where('read', isEqualTo: false)
+            .where(
+              'read',
+              isEqualTo: false,
+            )
             .limit(500)
             .get();
 
@@ -317,7 +367,7 @@ class NotificationService {
   }
 
   // ============================================================
-  // DELETE NOTIFICATION
+  // DELETE ONE NOTIFICATION
   // ============================================================
 
   Future<void> deleteNotification({
