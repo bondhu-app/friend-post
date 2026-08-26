@@ -16,18 +16,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      # ============================================================
-      # CHECKOUT
-      # ============================================================
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
-
-      # ============================================================
-      # JAVA 17
-      # ============================================================
 
       - name: Setup Java 17
         uses: actions/setup-java@v5
@@ -36,11 +26,6 @@ jobs:
           java-version: "17"
           cache: gradle
 
-
-      # ============================================================
-      # FLUTTER
-      # ============================================================
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -48,413 +33,29 @@ jobs:
           channel: stable
           cache: true
 
-
       - name: Check Flutter
         run: flutter --version
 
-
-      # ============================================================
-      # BACKUP FIREBASE
-      # ============================================================
-
-      - name: Backup Firebase configuration
+      - name: Verify required files
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "BACKING UP FIREBASE"
+          echo "VERIFYING PROJECT"
           echo "========================================"
 
-          if [ ! -f "android/app/google-services.json" ]; then
-            echo "ERROR: android/app/google-services.json not found."
-            exit 1
-          fi
-
-          cp android/app/google-services.json /tmp/google-services.json
-
-          echo "Firebase configuration backed up."
-
-
-      # ============================================================
-      # FLUTTER DEPENDENCIES
-      # ============================================================
-
-      - name: Get dependencies
-        run: flutter pub get
-
-
-      # ============================================================
-      # REBUILD ANDROID
-      # ============================================================
-
-      - name: Rebuild Android project
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "REBUILDING ANDROID PROJECT"
-          echo "========================================"
-
-          rm -rf android
-
-          flutter create \
-            --platforms=android \
-            --org com.friendpost \
-            --project-name friend_post \
-            --android-language kotlin \
-            .
-
-          cp /tmp/google-services.json \
-            android/app/google-services.json
-
-          echo ""
-          echo "Fresh Android project created."
-
-
-      # ============================================================
-      # REMOVE DEFAULT TEST
-      # ============================================================
-
-      - name: Remove default Flutter test
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "REMOVING DEFAULT TEST"
-          echo "========================================"
-
-          rm -rf test
-
-          echo "Default test removed."
-
-
-      # ============================================================
-      # CONFIGURE SETTINGS.GRADLE.KTS
-      # ============================================================
-
-      - name: Configure Android plugins
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CONFIGURING ANDROID PLUGINS"
-          echo "========================================"
-
-          python3 <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("android/settings.gradle.kts")
-          text = path.read_text()
-
-          KOTLIN = "2.3.0"
-          AGP = "8.9.1"
-          GOOGLE = "4.4.3"
-
-          # ----------------------------------------------------------
-          # Kotlin
-          # ----------------------------------------------------------
-
-          text = re.sub(
-              r'id\(\s*"org\.jetbrains\.kotlin\.android"\s*\)'
-              r'\s+version\s+"[^"]+"\s+apply\s+false',
-              f'id("org.jetbrains.kotlin.android") '
-              f'version "{KOTLIN}" apply false',
-              text,
-          )
-
-          if 'id("org.jetbrains.kotlin.android")' not in text:
-              text = text.replace(
-                  "plugins {",
-                  "plugins {\n"
-                  f'    id("org.jetbrains.kotlin.android") '
-                  f'version "{KOTLIN}" apply false',
-                  1,
-              )
-
-          # ----------------------------------------------------------
-          # Android Gradle Plugin
-          # ----------------------------------------------------------
-
-          text = re.sub(
-              r'id\(\s*"com\.android\.application"\s*\)'
-              r'\s+version\s+"[^"]+"\s+apply\s+false',
-              f'id("com.android.application") '
-              f'version "{AGP}" apply false',
-              text,
-          )
-
-          # ----------------------------------------------------------
-          # Google Services
-          # ----------------------------------------------------------
-
-          text = re.sub(
-              r'id\(\s*"com\.google\.gms\.google-services"\s*\)'
-              r'\s+version\s+"[^"]+"\s+apply\s+false',
-              f'id("com.google.gms.google-services") '
-              f'version "{GOOGLE}" apply false',
-              text,
-          )
-
-          if 'id("com.google.gms.google-services")' not in text:
-              text = text.replace(
-                  "plugins {",
-                  "plugins {\n"
-                  f'    id("com.google.gms.google-services") '
-                  f'version "{GOOGLE}" apply false',
-                  1,
-              )
-
-          path.write_text(text)
-
-          print("Kotlin:", KOTLIN)
-          print("AGP:", AGP)
-          print("Google Services:", GOOGLE)
-          PY
-
-
-      # ============================================================
-      # CONFIGURE APP BUILD.GRADLE.KTS
-      # ============================================================
-
-      - name: Configure app Gradle
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CONFIGURING APP GRADLE"
-          echo "========================================"
-
-          python3 <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("android/app/build.gradle.kts")
-          text = path.read_text()
-
-          # ==========================================================
-          # APPLICATION ID
-          # ==========================================================
-
-          text = re.sub(
-              r'applicationId\s*=\s*"[^"]+"',
-              'applicationId = "com.friendpost.app"',
-              text,
-              count=1,
-          )
-
-          # ==========================================================
-          # GOOGLE SERVICES PLUGIN
-          # ==========================================================
-
-          if 'id("com.google.gms.google-services")' not in text:
-              text = text.replace(
-                  "plugins {",
-                  "plugins {\n"
-                  '    id("com.google.gms.google-services")',
-                  1,
-              )
-
-          # ==========================================================
-          # REMOVE ANY OLD compileOptions BLOCK
-          # ==========================================================
-
-          def remove_block(source, name):
-              pattern = re.compile(
-                  rf'(?m)^[ \t]*{re.escape(name)}\s*\{{'
-              )
-
-              while True:
-                  match = pattern.search(source)
-
-                  if not match:
-                      break
-
-                  start = match.start()
-                  brace_start = source.find("{", match.start())
-
-                  depth = 0
-                  end = None
-
-                  for i in range(brace_start, len(source)):
-                      if source[i] == "{":
-                          depth += 1
-                      elif source[i] == "}":
-                          depth -= 1
-
-                          if depth == 0:
-                              end = i + 1
-                              break
-
-                  if end is None:
-                      raise SystemExit(
-                          f"ERROR: Could not parse {name} block."
-                      )
-
-                  source = source[:start] + source[end:]
-
-              return source
-
-          text = remove_block(text, "compileOptions")
-
-          # ==========================================================
-          # REMOVE OLD kotlinOptions BLOCK
-          # ==========================================================
-
-          text = remove_block(text, "kotlinOptions")
-
-          # ==========================================================
-          # REMOVE OLD kotlin { } BLOCK IF IT ONLY EXISTS FOR JVM
-          # ==========================================================
-
-          # We intentionally do not remove arbitrary kotlin blocks.
-          # Instead, the workflow uses Kotlin compilerOptions DSL
-          # through jvmToolchain below.
-          #
-          # If a previous kotlin block exists, it is left intact.
-          # We only add the toolchain if it is missing.
-
-          # ==========================================================
-          # FIND android { BLOCK
-          # ==========================================================
-
-          android_match = re.search(
-              r'(?m)^android\s*\{',
-              text,
-          )
-
-          if not android_match:
-              raise SystemExit(
-                  "ERROR: android { block was not found."
-              )
-
-          android_open = text.find(
-              "{",
-              android_match.start(),
-          )
-
-          depth = 0
-          android_end = None
-
-          for i in range(android_open, len(text)):
-              if text[i] == "{":
-                  depth += 1
-
-              elif text[i] == "}":
-                  depth -= 1
-
-                  if depth == 0:
-                      android_end = i
-                      break
-
-          if android_end is None:
-              raise SystemExit(
-                  "ERROR: Could not find end of android { block."
-              )
-
-          # ==========================================================
-          # JAVA 17
-          # ==========================================================
-
-          compile_options = """
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-
-          """
-
-          text = (
-              text[:android_end]
-              + "\n"
-              + compile_options
-              + text[android_end:]
-          )
-
-          # ==========================================================
-          # KOTLIN JVM TOOLCHAIN 17
-          # ==========================================================
-
-          if "jvmToolchain(17)" not in text:
-
-              text += """
-
-          kotlin {
-              jvmToolchain(17)
-          }
-          """
-
-          path.write_text(text)
-
-          print("")
-          print("Application ID: com.friendpost.app")
-          print("Java target: 17")
-          print("Kotlin JVM toolchain: 17")
-          print("")
-          PY
-
-
-      # ============================================================
-      # SHOW FINAL APP GRADLE
-      # ============================================================
-
-      - name: Show final Android configuration
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "FINAL ANDROID CONFIGURATION"
-          echo "========================================"
-
-          echo ""
-          echo "----- settings.gradle.kts -----"
-          cat android/settings.gradle.kts
-
-          echo ""
-          echo "----- app/build.gradle.kts -----"
-          cat android/app/build.gradle.kts
-
-
-      # ============================================================
-      # VERIFY JVM CONFIGURATION
-      # ============================================================
-
-      - name: Verify JVM 17 configuration
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING JVM 17"
-          echo "========================================"
-
-          grep -q \
-            'sourceCompatibility = JavaVersion.VERSION_17' \
-            android/app/build.gradle.kts
-
-          grep -q \
-            'targetCompatibility = JavaVersion.VERSION_17' \
-            android/app/build.gradle.kts
-
-          grep -q \
-            'jvmToolchain(17)' \
-            android/app/build.gradle.kts
-
-          echo ""
-          echo "SUCCESS: Java 17 and Kotlin JVM 17 configured."
-
-
-      # ============================================================
-      # VERIFY FIREBASE
-      # ============================================================
-
-      - name: Verify Firebase
+          test -f pubspec.yaml
+          test -f lib/main.dart
+          test -f lib/firebase_options.dart
+          test -f android/app/google-services.json
+          test -f android/app/build.gradle.kts
+          test -f android/settings.gradle.kts
+          test -f android/gradle/wrapper/gradle-wrapper.properties
+
+          echo "All required files found."
+
+      - name: Verify Firebase configuration
         shell: bash
         run: |
           set -e
@@ -463,23 +64,19 @@ jobs:
           echo "VERIFYING FIREBASE"
           echo "========================================"
 
-          test -f android/app/google-services.json
-
-          grep -q \
-            'applicationId = "com.friendpost.app"' \
-            android/app/build.gradle.kts
-
-          grep -q \
-            '"package_name": "com.friendpost.app"' \
+          grep -q '"project_id": "friend-post-fbfdd"' \
             android/app/google-services.json
 
-          echo ""
-          echo "SUCCESS: Firebase package matches Android package."
+          grep -q '"package_name": "com.friendpost.app"' \
+            android/app/google-services.json
 
+          grep -q "friend-post-fbfdd" \
+            lib/firebase_options.dart
 
-      # ============================================================
-      # CHECK V1 EMBEDDING
-      # ============================================================
+          grep -q "com.friendpost.app" \
+            android/app/build.gradle.kts
+
+          echo "Firebase configuration verified."
 
       - name: Check Android V1 embedding
         shell: bash
@@ -503,35 +100,20 @@ jobs:
             exit 1
           fi
 
-          echo "SUCCESS: No Android V1 embedding found."
+          echo "No Android V1 embedding found."
 
-
-      # ============================================================
-      # VERIFY ANDROID FILES
-      # ============================================================
-
-      - name: Verify Android project
+      - name: Get dependencies
         shell: bash
         run: |
           set -e
 
-          test -f android/gradlew
-          test -f android/settings.gradle.kts
-          test -f android/build.gradle.kts
-          test -f android/app/build.gradle.kts
-          test -f android/gradle/wrapper/gradle-wrapper.properties
-          test -f android/app/src/main/AndroidManifest.xml
-          test -f android/app/google-services.json
+          echo "========================================"
+          echo "GETTING FLUTTER DEPENDENCIES"
+          echo "========================================"
 
-          echo ""
-          echo "Android project verification passed."
+          flutter pub get
 
-
-      # ============================================================
-      # CLEAN
-      # ============================================================
-
-      - name: Clean Flutter project
+      - name: Clean project
         shell: bash
         run: |
           set -e
@@ -541,19 +123,7 @@ jobs:
           echo "========================================"
 
           flutter clean
-
-          rm -rf android/.gradle
-          rm -rf android/build
-          rm -rf build
-
           flutter pub get
-
-          echo "Clean completed."
-
-
-      # ============================================================
-      # ANALYZE
-      # ============================================================
 
       - name: Analyze project
         shell: bash
@@ -569,11 +139,6 @@ jobs:
           echo ""
           echo "Flutter analyze completed successfully."
 
-
-      # ============================================================
-      # BUILD APK
-      # ============================================================
-
       - name: Build release APK
         shell: bash
         run: |
@@ -586,12 +151,7 @@ jobs:
           flutter build apk --release
 
           echo ""
-          echo "Flutter APK build completed."
-
-
-      # ============================================================
-      # VERIFY APK
-      # ============================================================
+          echo "APK build completed successfully."
 
       - name: Verify APK
         shell: bash
@@ -605,22 +165,16 @@ jobs:
           echo "========================================"
 
           if [ ! -f "$APK" ]; then
-            echo ""
             echo "ERROR: APK was not created."
             exit 1
           fi
+
+          ls -lh "$APK"
 
           echo ""
           echo "========================================"
           echo "APK BUILD SUCCESS"
           echo "========================================"
-
-          ls -lh "$APK"
-
-
-      # ============================================================
-      # UPLOAD APK
-      # ============================================================
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
