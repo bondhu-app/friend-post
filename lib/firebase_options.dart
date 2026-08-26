@@ -1,33 +1,87 @@
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
+# ============================================================
+      # VERIFY FIREBASE OPTIONS
+      # ============================================================
 
-class DefaultFirebaseOptions {
-  static FirebaseOptions get currentPlatform {
-    if (kIsWeb) {
-      return android;
-    }
+      - name: Verify firebase_options.dart
+        shell: bash
+        run: |
+          set -e
 
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return android;
-      case TargetPlatform.iOS:
-        return android;
-      case TargetPlatform.macOS:
-        return android;
-      case TargetPlatform.windows:
-        return android;
-      case TargetPlatform.linux:
-        return android;
-      case TargetPlatform.fuchsia:
-        return android;
-    }
-  }
+          echo "========================================"
+          echo "VERIFYING FIREBASE OPTIONS"
+          echo "========================================"
 
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAbYCTmMxhCJzft1dgnpHDRkbC4v9RMU4GE',
-    appId: '1:1074705827775:android:68710467504787bc3a430a',
-    messagingSenderId: '1074705827775',
-    projectId: 'friend-post-fbfdd',
-    storageBucket: 'friend-post-fbfdd.firebasestorage.app',
-  );
-}
+          FILE="lib/firebase_options.dart"
+
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: $FILE not found."
+            exit 1
+          fi
+
+          echo "Found: $FILE"
+
+          grep -q "class DefaultFirebaseOptions" "$FILE" || {
+            echo "ERROR: DefaultFirebaseOptions class not found."
+            exit 1
+          }
+
+          grep -q "FirebaseOptions" "$FILE" || {
+            echo "ERROR: FirebaseOptions not found."
+            exit 1
+          }
+
+          grep -q "projectId:" "$FILE" || {
+            echo "ERROR: projectId not found."
+            exit 1
+          }
+
+          grep -q "apiKey:" "$FILE" || {
+            echo "ERROR: apiKey not found."
+            exit 1
+          }
+
+          grep -q "appId:" "$FILE" || {
+            echo "ERROR: appId not found."
+            exit 1
+          }
+
+          grep -q "messagingSenderId:" "$FILE" || {
+            echo "ERROR: messagingSenderId not found."
+            exit 1
+          }
+
+          grep -q "storageBucket:" "$FILE" || {
+            echo "ERROR: storageBucket not found."
+            exit 1
+          }
+
+          grep -q "friend-post-fbfdd" "$FILE" || {
+            echo "ERROR: Friend Post Firebase project ID not found."
+            exit 1
+          }
+
+          grep -q "1074705827775" "$FILE" || {
+            echo "ERROR: Firebase messaging sender ID not found."
+            exit 1
+          }
+
+          grep -q "68710467504787bc3a430a" "$FILE" || {
+            echo "ERROR: Firebase Android App ID not found."
+            exit 1
+          }
+
+          grep -q "AIzaSyAbYCTMxhCJzft1dgnpHDRkbC4v9RMU4GE" "$FILE" || {
+            echo "ERROR: Firebase API key not found."
+            exit 1
+          }
+
+          grep -q "TargetPlatform.fuchsia" "$FILE" || {
+            echo "ERROR: TargetPlatform.fuchsia case not found."
+            exit 1
+          }
+
+          echo ""
+          echo "Firebase options verified successfully."
+          echo "Project: friend-post-fbfdd"
+          echo "Android App ID: 1:1074705827775:android:68710467504787bc3a430a"
+          echo "Firebase configuration is valid."
