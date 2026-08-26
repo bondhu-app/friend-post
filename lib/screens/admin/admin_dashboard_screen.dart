@@ -6,12 +6,16 @@ class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  State<AdminDashboardScreen> createState() =>
+      _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
+
+  final FirebaseAuth _auth =
+      FirebaseAuth.instance;
 
   bool _loading = true;
   bool _isAdmin = false;
@@ -43,27 +47,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
       if (user == null) {
         if (!mounted) return;
+
         setState(() {
           _isAdmin = false;
           _loading = false;
         });
+
         return;
       }
 
-      final userDoc =
-          await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
       final userData = userDoc.data() ?? {};
 
-      final isAdminValue =
-          userData['isAdmin'] == true || userData['admin'] == true;
+      final isAdmin =
+          userData['isAdmin'] == true ||
+          userData['admin'] == true;
 
-      if (!isAdminValue) {
+      if (!isAdmin) {
         if (!mounted) return;
+
         setState(() {
           _isAdmin = false;
           _loading = false;
         });
+
         return;
       }
 
@@ -76,9 +87,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _loadWithdrawCount(),
         _loadAdminWallet(),
       ]);
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        _showMessage('Dashboard লোড করতে সমস্যা হয়েছে');
+        _showMessage(
+          'Dashboard লোড করতে সমস্যা হয়েছে।',
+        );
       }
     } finally {
       if (mounted) {
@@ -91,12 +104,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _loadUsersCount() async {
     try {
-      final snapshot = await _firestore.collection('users').count().get();
+      final snapshot = await _firestore
+          .collection('users')
+          .count()
+          .get();
 
       _usersCount = snapshot.count ?? 0;
     } catch (_) {
       try {
-        final snapshot = await _firestore.collection('users').get();
+        final snapshot = await _firestore
+            .collection('users')
+            .get();
+
         _usersCount = snapshot.docs.length;
       } catch (_) {
         _usersCount = 0;
@@ -106,12 +125,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _loadPostsCount() async {
     try {
-      final snapshot = await _firestore.collection('posts').count().get();
+      final snapshot = await _firestore
+          .collection('posts')
+          .count()
+          .get();
 
       _postsCount = snapshot.count ?? 0;
     } catch (_) {
       try {
-        final snapshot = await _firestore.collection('posts').get();
+        final snapshot = await _firestore
+            .collection('posts')
+            .get();
+
         _postsCount = snapshot.docs.length;
       } catch (_) {
         _postsCount = 0;
@@ -123,7 +148,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     try {
       int total = 0;
 
-      final postsSnapshot = await _firestore.collection('posts').get();
+      final postsSnapshot = await _firestore
+          .collection('posts')
+          .get();
 
       for (final post in postsSnapshot.docs) {
         try {
@@ -146,14 +173,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _loadWithdrawCount() async {
     try {
-      final snapshot =
-          await _firestore.collection('withdraw_requests').count().get();
+      final snapshot = await _firestore
+          .collection('withdraw_requests')
+          .count()
+          .get();
 
       _withdrawCount = snapshot.count ?? 0;
     } catch (_) {
       try {
-        final snapshot =
-            await _firestore.collection('withdraw_requests').get();
+        final snapshot = await _firestore
+            .collection('withdraw_requests')
+            .get();
 
         _withdrawCount = snapshot.docs.length;
       } catch (_) {
@@ -164,45 +194,49 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Future<void> _loadAdminWallet() async {
     try {
-      final walletDoc =
-          await _firestore.collection('earnings').doc('owner_wallet').get();
+      final walletDoc = await _firestore
+          .collection('earnings')
+          .doc('owner_wallet')
+          .get();
 
-      if (!walletDoc.exists) {
+      if (walletDoc.exists) {
+        final data = walletDoc.data() ?? {};
+
+        _adminBalance =
+            _toDouble(data['balance']);
+
+        _totalEarned =
+            _toDouble(data['totalEarned']);
+
+        _totalPaidToUsers =
+            _toDouble(data['totalPaidToUsers']);
+
         return;
       }
+    } catch (_) {}
+
+    try {
+      final walletDoc = await _firestore
+          .collection('admin')
+          .doc('owner_wallet')
+          .get();
+
+      if (!walletDoc.exists) return;
 
       final data = walletDoc.data() ?? {};
 
-      _adminBalance = _toDouble(data['balance']);
-      _totalEarned = _toDouble(data['totalEarned']);
-      _totalPaidToUsers = _toDouble(data['totalPaidToUsers']);
-    } catch (_) {
-      try {
-        final walletDoc =
-            await _firestore.collection('admin').doc('owner_wallet').get();
+      _adminBalance =
+          _toDouble(data['balance']);
 
-        if (!walletDoc.exists) {
-          return;
-        }
+      _totalEarned =
+          _toDouble(data['totalEarned']);
 
-        final data = walletDoc.data() ?? {};
-
-        _adminBalance = _toDouble(data['balance']);
-        _totalEarned = _toDouble(data['totalEarned']);
-        _totalPaidToUsers = _toDouble(data['totalPaidToUsers']);
-      } catch (_) {}
-    }
+      _totalPaidToUsers =
+          _toDouble(data['totalPaidToUsers']);
+    } catch (_) {}
   }
 
   double _toDouble(dynamic value) {
-    if (value is int) {
-      return value.toDouble();
-    }
-
-    if (value is double) {
-      return value;
-    }
-
     if (value is num) {
       return value.toDouble();
     }
@@ -231,20 +265,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
   }
 
-  Future<void> _openWithdrawRequests() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const _WithdrawRequestsScreen(),
-      ),
-    );
-
-    await _loadDashboard();
-  }
-
   Future<void> _openUsers() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const _AdminUsersScreen(),
+        builder: (_) => _AdminUsersScreen(),
       ),
     );
 
@@ -254,7 +278,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _openPosts() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const _AdminPostsScreen(),
+        builder: (_) => _AdminPostsScreen(),
+      ),
+    );
+
+    await _loadDashboard();
+  }
+
+  Future<void> _openWithdrawRequests() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _WithdrawRequestsScreen(),
       ),
     );
 
@@ -283,7 +317,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
               children: [
                 const Icon(
                   Icons.admin_panel_settings_outlined,
@@ -329,7 +364,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           IconButton(
             onPressed: _loadDashboard,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
           ),
         ],
       ),
@@ -352,7 +386,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildWelcomeCard() {
-    final email = _auth.currentUser?.email ?? 'Admin';
+    final email =
+        _auth.currentUser?.email ?? 'Admin';
 
     return Card(
       elevation: 2,
@@ -360,9 +395,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            CircleAvatar(
+            const CircleAvatar(
               radius: 30,
-              child: const Icon(
+              child: Icon(
                 Icons.admin_panel_settings,
                 size: 34,
               ),
@@ -370,7 +405,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const SizedBox(width: 16),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   const Text(
                     'Welcome, Admin',
@@ -383,10 +419,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   Text(
                     email,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                    ),
+                    overflow:
+                        TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -403,7 +437,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
       shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+      physics:
+          const NeverScrollableScrollPhysics(),
       childAspectRatio: 1.45,
       children: [
         _statCard(
@@ -440,8 +475,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
             Icon(
               icon,
@@ -455,13 +492,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade700,
-              ),
-            ),
+            Text(title),
           ],
         ),
       ),
@@ -474,11 +505,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             const Row(
               children: [
-                Icon(Icons.account_balance_wallet),
+                Icon(
+                  Icons.account_balance_wallet,
+                ),
                 SizedBox(width: 10),
                 Text(
                   'Admin Revenue',
@@ -510,20 +544,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _revenueRow(String title, String value) {
+  Widget _revenueRow(
+    String title,
+    String value,
+  ) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment:
+          MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-          ),
-        ),
+        Text(title),
         Text(
           value,
           style: const TextStyle(
-            fontSize: 17,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -533,7 +565,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _buildManagementSection() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
       children: [
         const Text(
           'Management',
@@ -546,27 +579,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _managementTile(
           icon: Icons.people,
           title: 'Manage Users',
-          subtitle: 'Users দেখা এবং Admin status পরিচালনা',
+          subtitle:
+              'Users দেখা এবং Admin status পরিচালনা',
           onTap: _openUsers,
         ),
         _managementTile(
           icon: Icons.article,
           title: 'Manage Posts',
-          subtitle: 'Posts দেখা এবং প্রয়োজন হলে delete করা',
+          subtitle:
+              'Posts দেখা এবং delete করা',
           onTap: _openPosts,
         ),
         _managementTile(
           icon: Icons.account_balance_wallet,
           title: 'Admin Wallet',
-          subtitle: 'Admin balance এবং revenue',
-          onTap: () {
-            _showWalletDialog();
-          },
+          subtitle:
+              'Admin balance এবং revenue',
+          onTap: _showWalletDialog,
         ),
         _managementTile(
           icon: Icons.payments,
           title: 'Withdraw Requests',
-          subtitle: 'User withdrawal requests পরিচালনা',
+          subtitle:
+              'User withdrawal requests পরিচালনা',
           onTap: _openWithdrawRequests,
         ),
       ],
@@ -580,8 +615,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required VoidCallback onTap,
   }) {
     return Card(
-      elevation: 1,
-      margin: const EdgeInsets.only(bottom: 10),
+      margin:
+          const EdgeInsets.only(bottom: 10),
       child: ListTile(
         leading: CircleAvatar(
           child: Icon(icon),
@@ -593,7 +628,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
+        trailing:
+            const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
     );
@@ -602,9 +638,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _showWalletDialog() {
     showDialog<void>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Admin Wallet'),
+          title: const Text(
+            'Admin Wallet',
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -626,7 +664,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () =>
+                  Navigator.pop(dialogContext),
               child: const Text('বন্ধ করুন'),
             ),
           ],
@@ -635,9 +674,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  Widget _dialogMoneyRow(String title, String value) {
+  Widget _dialogMoneyRow(
+    String title,
+    String value,
+  ) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment:
+          MainAxisAlignment.spaceBetween,
       children: [
         Text(title),
         Text(
@@ -651,14 +694,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/*                              USERS SCREEN                                  */
-/* -------------------------------------------------------------------------- */
+/* ============================== USERS ============================== */
 
 class _AdminUsersScreen extends StatelessWidget {
-  const _AdminUsersScreen();
+  _AdminUsersScreen();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -666,10 +708,13 @@ class _AdminUsersScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Manage Users'),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _firestore.collection('users').snapshots(),
+      body:
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream:
+            _firestore.collection('users').snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(),
             );
@@ -677,15 +722,20 @@ class _AdminUsersScreen extends StatelessWidget {
 
           if (snapshot.hasError) {
             return const Center(
-              child: Text('Users লোড করা যায়নি'),
+              child: Text(
+                'Users লোড করা যায়নি',
+              ),
             );
           }
 
-          final docs = snapshot.data?.docs ?? [];
+          final docs =
+              snapshot.data?.docs ?? [];
 
           if (docs.isEmpty) {
             return const Center(
-              child: Text('কোনো user পাওয়া যায়নি'),
+              child: Text(
+                'কোনো user পাওয়া যায়নি',
+              ),
             );
           }
 
@@ -697,30 +747,40 @@ class _AdminUsersScreen extends StatelessWidget {
               final data = doc.data();
 
               final name =
-                  (data['name'] ?? data['displayName'] ?? 'Unknown User')
+                  (data['name'] ??
+                          data['displayName'] ??
+                          'Unknown User')
                       .toString();
 
-              final email = (data['email'] ?? '').toString();
+              final email =
+                  (data['email'] ?? '').toString();
 
               final isAdmin =
-                  data['isAdmin'] == true || data['admin'] == true;
+                  data['isAdmin'] == true ||
+                  data['admin'] == true;
 
               return Card(
                 child: ListTile(
                   leading: CircleAvatar(
                     child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                      name.isNotEmpty
+                          ? name[0].toUpperCase()
+                          : 'U',
                     ),
                   ),
                   title: Text(
                     name,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    overflow:
+                        TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    email.isEmpty ? doc.id : email,
+                    email.isEmpty
+                        ? doc.id
+                        : email,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    overflow:
+                        TextOverflow.ellipsis,
                   ),
                   trailing: isAdmin
                       ? const Chip(
@@ -737,22 +797,22 @@ class _AdminUsersScreen extends StatelessWidget {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/*                              POSTS SCREEN                                  */
-/* -------------------------------------------------------------------------- */
+/* ============================== POSTS ============================== */
 
 class _AdminPostsScreen extends StatelessWidget {
-  const _AdminPostsScreen();
+  _AdminPostsScreen();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
   Future<void> _deletePost(
     BuildContext context,
     String postId,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed =
+        await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Post Delete'),
           content: const Text(
@@ -760,11 +820,19 @@ class _AdminPostsScreen extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () =>
+                  Navigator.pop(
+                dialogContext,
+                false,
+              ),
               child: const Text('না'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () =>
+                  Navigator.pop(
+                dialogContext,
+                true,
+              ),
               child: const Text('Delete'),
             ),
           ],
@@ -777,20 +845,28 @@ class _AdminPostsScreen extends StatelessWidget {
     }
 
     try {
-      await _firestore.collection('posts').doc(postId).delete();
+      await _firestore
+          .collection('posts')
+          .doc(postId)
+          .delete();
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           const SnackBar(
-            content: Text('Post delete হয়েছে'),
+            content:
+                Text('Post delete হয়েছে'),
           ),
         );
       }
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           const SnackBar(
-            content: Text('Post delete করা যায়নি'),
+            content: Text(
+              'Post delete করা যায়নি',
+            ),
           ),
         );
       }
@@ -803,7 +879,8 @@ class _AdminPostsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Manage Posts'),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      body:
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _firestore
             .collection('posts')
             .orderBy(
@@ -812,7 +889,8 @@ class _AdminPostsScreen extends StatelessWidget {
             )
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(),
             );
@@ -821,18 +899,20 @@ class _AdminPostsScreen extends StatelessWidget {
           if (snapshot.hasError) {
             return const Center(
               child: Text(
-                'Posts লোড করতে সমস্যা হয়েছে।\n'
-                'createdAt index/order field না থাকলে এখানে error হতে পারে।',
+                'Posts লোড করতে সমস্যা হয়েছে।',
                 textAlign: TextAlign.center,
               ),
             );
           }
 
-          final docs = snapshot.data?.docs ?? [];
+          final docs =
+              snapshot.data?.docs ?? [];
 
           if (docs.isEmpty) {
             return const Center(
-              child: Text('কোনো post পাওয়া যায়নি'),
+              child: Text(
+                'কোনো post পাওয়া যায়নি',
+              ),
             );
           }
 
@@ -843,33 +923,48 @@ class _AdminPostsScreen extends StatelessWidget {
               final doc = docs[index];
               final data = doc.data();
 
-              final text = (data['text'] ??
-                      data['content'] ??
-                      data['caption'] ??
-                      '')
-                  .toString();
+              final text =
+                  (data['text'] ??
+                          data['content'] ??
+                          data['caption'] ??
+                          '')
+                      .toString();
 
               final userName =
-                  (data['userName'] ?? data['name'] ?? 'User').toString();
+                  (data['userName'] ??
+                          data['name'] ??
+                          'User')
+                      .toString();
 
               return Card(
-                margin: const EdgeInsets.only(bottom: 10),
+                margin:
+                    const EdgeInsets.only(
+                  bottom: 10,
+                ),
                 child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.article),
+                  leading:
+                      const CircleAvatar(
+                    child:
+                        Icon(Icons.article),
                   ),
                   title: Text(
                     userName,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    overflow:
+                        TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    text.isEmpty ? 'No text' : text,
+                    text.isEmpty
+                        ? 'No text'
+                        : text,
                     maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+                    overflow:
+                        TextOverflow.ellipsis,
                   ),
                   trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                    ),
                     onPressed: () {
                       _deletePost(
                         context,
@@ -887,14 +982,14 @@ class _AdminPostsScreen extends StatelessWidget {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/*                         WITHDRAW REQUEST SCREEN                            */
-/* -------------------------------------------------------------------------- */
+/* ========================== WITHDRAW ========================== */
 
-class _WithdrawRequestsScreen extends StatelessWidget {
-  const _WithdrawRequestsScreen();
+class _WithdrawRequestsScreen
+    extends StatelessWidget {
+  _WithdrawRequestsScreen();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
   String _money(dynamic value) {
     double amount = 0;
@@ -902,7 +997,8 @@ class _WithdrawRequestsScreen extends StatelessWidget {
     if (value is num) {
       amount = value.toDouble();
     } else if (value is String) {
-      amount = double.tryParse(value) ?? 0;
+      amount =
+          double.tryParse(value) ?? 0;
     }
 
     return '৳${amount.toStringAsFixed(2)}';
@@ -919,11 +1015,13 @@ class _WithdrawRequestsScreen extends StatelessWidget {
           .doc(requestId)
           .update({
         'status': status,
-        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedAt':
+            FieldValue.serverTimestamp(),
       });
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           SnackBar(
             content: Text(
               status == 'approved'
@@ -935,9 +1033,12 @@ class _WithdrawRequestsScreen extends StatelessWidget {
       }
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
           const SnackBar(
-            content: Text('Request update করা যায়নি'),
+            content: Text(
+              'Request update করা যায়নি',
+            ),
           ),
         );
       }
@@ -948,9 +1049,11 @@ class _WithdrawRequestsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Withdraw Requests'),
+        title:
+            const Text('Withdraw Requests'),
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      body:
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _firestore
             .collection('withdraw_requests')
             .orderBy(
@@ -959,7 +1062,8 @@ class _WithdrawRequestsScreen extends StatelessWidget {
             )
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
             return const Center(
               child: CircularProgressIndicator(),
             );
@@ -974,67 +1078,100 @@ class _WithdrawRequestsScreen extends StatelessWidget {
             );
           }
 
-          final docs = snapshot.data?.docs ?? [];
+          final docs =
+              snapshot.data?.docs ?? [];
 
           if (docs.isEmpty) {
             return const Center(
-              child: Text('কোনো withdraw request নেই'),
+              child: Text(
+                'কোনো withdraw request নেই',
+              ),
             );
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.all(12),
+            padding:
+                const EdgeInsets.all(12),
             itemCount: docs.length,
             itemBuilder: (context, index) {
               final doc = docs[index];
               final data = doc.data();
 
               final userName =
-                  (data['userName'] ?? data['name'] ?? 'User').toString();
+                  (data['userName'] ??
+                          data['name'] ??
+                          'User')
+                      .toString();
 
-              final userId = (data['userId'] ?? '').toString();
+              final userId =
+                  (data['userId'] ?? '')
+                      .toString();
 
-              final amount = data['amount'];
+              final amount =
+                  data['amount'];
 
               final method =
-                  (data['method'] ?? data['paymentMethod'] ?? 'Unknown')
+                  (data['method'] ??
+                          data['paymentMethod'] ??
+                          'Unknown')
                       .toString();
 
               final status =
-                  (data['status'] ?? 'pending').toString().toLowerCase();
+                  (data['status'] ??
+                          'pending')
+                      .toString()
+                      .toLowerCase();
 
               return Card(
-                margin: const EdgeInsets.only(bottom: 12),
+                margin:
+                    const EdgeInsets.only(
+                  bottom: 12,
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(14),
+                  padding:
+                      const EdgeInsets.all(14),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
                           const CircleAvatar(
-                            child: Icon(Icons.person),
+                            child:
+                                Icon(Icons.person),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(
+                            width: 12,
+                          ),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment
+                                      .start,
                               children: [
                                 Text(
                                   userName,
-                                  style: const TextStyle(
+                                  style:
+                                      const TextStyle(
                                     fontSize: 17,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight:
+                                        FontWeight
+                                            .bold,
                                   ),
                                 ),
-                                if (userId.isNotEmpty)
+                                if (userId
+                                    .isNotEmpty)
                                   Text(
                                     userId,
                                     maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                    overflow:
+                                        TextOverflow
+                                            .ellipsis,
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey.shade600,
+                                      color: Colors
+                                          .grey
+                                          .shade600,
                                     ),
                                   ),
                               ],
@@ -1042,23 +1179,36 @@ class _WithdrawRequestsScreen extends StatelessWidget {
                           ),
                           Text(
                             _money(amount),
-                            style: const TextStyle(
+                            style:
+                                const TextStyle(
                               fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                              fontWeight:
+                                  FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Text('Payment: $method'),
-                      const SizedBox(height: 6),
-                      Text('Status: $status'),
-                      const SizedBox(height: 12),
+                      const SizedBox(
+                        height: 12,
+                      ),
+                      Text(
+                        'Payment: $method',
+                      ),
+                      const SizedBox(
+                        height: 6,
+                      ),
+                      Text(
+                        'Status: $status',
+                      ),
+                      const SizedBox(
+                        height: 12,
+                      ),
                       if (status == 'pending')
                         Row(
                           children: [
                             Expanded(
-                              child: OutlinedButton(
+                              child:
+                                  OutlinedButton(
                                 onPressed: () {
                                   _updateRequest(
                                     context,
@@ -1066,12 +1216,18 @@ class _WithdrawRequestsScreen extends StatelessWidget {
                                     'rejected',
                                   );
                                 },
-                                child: const Text('Reject'),
+                                child:
+                                    const Text(
+                                  'Reject',
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(
+                              width: 10,
+                            ),
                             Expanded(
-                              child: FilledButton(
+                              child:
+                                  FilledButton(
                                 onPressed: () {
                                   _updateRequest(
                                     context,
@@ -1079,7 +1235,10 @@ class _WithdrawRequestsScreen extends StatelessWidget {
                                     'approved',
                                   );
                                 },
-                                child: const Text('Approve'),
+                                child:
+                                    const Text(
+                                  'Approve',
+                                ),
                               ),
                             ),
                           ],
