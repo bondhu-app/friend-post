@@ -12,12 +12,22 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build Release APK
+    name: Build and Verify Release APK
     runs-on: ubuntu-latest
 
     steps:
+
+      # ============================================================
+      # CHECKOUT
+      # ============================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
+
+      # ============================================================
+      # JAVA 17
+      # ============================================================
 
       - name: Setup Java 17
         uses: actions/setup-java@v5
@@ -26,6 +36,11 @@ jobs:
           java-version: "17"
           cache: gradle
 
+
+      # ============================================================
+      # FLUTTER
+      # ============================================================
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -33,50 +48,187 @@ jobs:
           channel: stable
           cache: true
 
+
+      # ============================================================
+      # FLUTTER VERSION
+      # ============================================================
+
       - name: Check Flutter
-        run: flutter --version
-
-      - name: Verify required files
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING PROJECT"
+          echo "FLUTTER VERSION"
           echo "========================================"
 
-          test -f pubspec.yaml
-          test -f lib/main.dart
-          test -f lib/firebase_options.dart
-          test -f android/app/google-services.json
-          test -f android/app/build.gradle.kts
-          test -f android/settings.gradle.kts
-          test -f android/gradle/wrapper/gradle-wrapper.properties
+          flutter --version
 
-          echo "All required files found."
 
-      - name: Verify Firebase configuration
+      # ============================================================
+      # VERIFY PROJECT STRUCTURE
+      # ============================================================
+
+      - name: Verify project structure
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING FIREBASE"
+          echo "VERIFYING PROJECT STRUCTURE"
           echo "========================================"
 
-          grep -q '"project_id": "friend-post-fbfdd"' \
-            android/app/google-services.json
+          required_files=(
+            "pubspec.yaml"
+            "lib/main.dart"
+            "lib/firebase_options.dart"
+            "android/app/google-services.json"
+            "android/app/build.gradle.kts"
+            "android/settings.gradle.kts"
+            "android/build.gradle.kts"
+            "android/gradlew"
+            "android/gradle/wrapper/gradle-wrapper.properties"
+            "android/app/src/main/AndroidManifest.xml"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "ERROR: Missing file: $file"
+              exit 1
+            fi
+
+            echo "OK: $file"
+          done
+
+          echo ""
+          echo "Project structure verification passed."
+
+
+      # ============================================================
+      # VERIFY PUBSPEC
+      # ============================================================
+
+      - name: Verify pubspec configuration
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING PUBSPEC"
+          echo "========================================"
+
+          grep -q "^name: friend_post" pubspec.yaml
+          grep -q "firebase_core:" pubspec.yaml
+          grep -q "firebase_auth:" pubspec.yaml
+          grep -q "cloud_firestore:" pubspec.yaml
+          grep -q "firebase_storage:" pubspec.yaml
+          grep -q "google_mobile_ads:" pubspec.yaml
+
+          echo "pubspec configuration verified."
+
+
+      # ============================================================
+      # VERIFY FIREBASE JSON
+      # ============================================================
+
+      - name: Verify Firebase JSON
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING FIREBASE JSON"
+          echo "========================================"
+
+          FIREBASE="android/app/google-services.json"
+
+          grep -q '"project_id": "friend-post-fbfdd"' "$FIREBASE"
+          grep -q '"package_name": "com.friendpost.app"' "$FIREBASE"
+          grep -q '"mobilesdk_app_id": "1:1074705827775:android:68710467504787bc3a430a"' "$FIREBASE"
+
+          echo "Firebase project ID: friend-post-fbfdd"
+          echo "Firebase package: com.friendpost.app"
+          echo "Firebase Android App ID verified."
+
+
+      # ============================================================
+      # VERIFY FIREBASE OPTIONS
+      # ============================================================
+
+      - name: Verify firebase_options.dart
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING FIREBASE OPTIONS"
+          echo "========================================"
+
+          FILE="lib/firebase_options.dart"
+
+          grep -q "class DefaultFirebaseOptions" "$FILE"
+          grep -q "FirebaseOptions" "$FILE"
+          grep -q "friend-post-fbfdd" "$FILE"
+          grep -q "1074705827775" "$FILE"
+          grep -q "68710467504787bc3a430a" "$FILE"
+          grep -q "AIzaSyAbYCTMxhCJzft1dgnpHDRkbC4v9RMU4GE" "$FILE"
+          grep -q "TargetPlatform.fuchsia" "$FILE"
+
+          echo "firebase_options.dart verified."
+
+
+      # ============================================================
+      # VERIFY MAIN DART
+      # ============================================================
+
+      - name: Verify main.dart Firebase initialization
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING MAIN.DART"
+          echo "========================================"
+
+          FILE="lib/main.dart"
+
+          grep -q "firebase_core/firebase_core.dart" "$FILE"
+          grep -q "firebase_options.dart" "$FILE"
+          grep -q "Firebase.initializeApp" "$FILE"
+          grep -q "DefaultFirebaseOptions.currentPlatform" "$FILE"
+
+          echo "main.dart Firebase initialization verified."
+
+
+      # ============================================================
+      # VERIFY ANDROID PACKAGE
+      # ============================================================
+
+      - name: Verify Android package
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING ANDROID PACKAGE"
+          echo "========================================"
+
+          grep -q 'applicationId = "com.friendpost.app"' \
+            android/app/build.gradle.kts
+
+          grep -q 'namespace = "com.friendpost.app"' \
+            android/app/build.gradle.kts
 
           grep -q '"package_name": "com.friendpost.app"' \
             android/app/google-services.json
 
-          grep -q "friend-post-fbfdd" \
-            lib/firebase_options.dart
+          echo "Android package: com.friendpost.app"
+          echo "Android package verification passed."
 
-          grep -q "com.friendpost.app" \
-            android/app/build.gradle.kts
 
-          echo "Firebase configuration verified."
+      # ============================================================
+      # CHECK ANDROID V1 EMBEDDING
+      # ============================================================
 
       - name: Check Android V1 embedding
         shell: bash
@@ -96,24 +248,56 @@ jobs:
             android; then
 
             echo ""
-            echo "ERROR: Legacy Android V1 embedding found."
+            echo "ERROR: Legacy Android V1 embedding detected."
             exit 1
           fi
 
-          echo "No Android V1 embedding found."
+          echo "SUCCESS: No Android V1 embedding found."
 
-      - name: Get dependencies
+
+      # ============================================================
+      # GET DEPENDENCIES
+      # ============================================================
+
+      - name: Get Flutter dependencies
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "GETTING FLUTTER DEPENDENCIES"
+          echo "GETTING DEPENDENCIES"
           echo "========================================"
 
           flutter pub get
 
-      - name: Clean project
+          echo ""
+          echo "Dependencies installed successfully."
+
+
+      # ============================================================
+      # VERIFY DEPENDENCY TREE
+      # ============================================================
+
+      - name: Verify dependency tree
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING DEPENDENCIES"
+          echo "========================================"
+
+          flutter pub deps
+
+          echo ""
+          echo "Dependency tree generated successfully."
+
+
+      # ============================================================
+      # CLEAN
+      # ============================================================
+
+      - name: Clean Flutter project
         shell: bash
         run: |
           set -e
@@ -125,7 +309,15 @@ jobs:
           flutter clean
           flutter pub get
 
-      - name: Analyze project
+          echo ""
+          echo "Clean completed."
+
+
+      # ============================================================
+      # ANALYZE
+      # ============================================================
+
+      - name: Run Flutter analyze
         shell: bash
         run: |
           set -e
@@ -139,6 +331,11 @@ jobs:
           echo ""
           echo "Flutter analyze completed successfully."
 
+
+      # ============================================================
+      # BUILD APK
+      # ============================================================
+
       - name: Build release APK
         shell: bash
         run: |
@@ -151,34 +348,174 @@ jobs:
           flutter build apk --release
 
           echo ""
-          echo "APK build completed successfully."
+          echo "Release APK build completed."
 
-      - name: Verify APK
+
+      # ============================================================
+      # VERIFY APK FILE
+      # ============================================================
+
+      - name: Verify APK file
         shell: bash
         run: |
           set -e
 
+          echo "========================================"
+          echo "VERIFYING APK FILE"
+          echo "========================================"
+
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
-          echo "========================================"
-          echo "VERIFYING APK"
-          echo "========================================"
-
           if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not created."
+            echo "ERROR: APK file was not created."
             exit 1
           fi
 
+          if [ ! -s "$APK" ]; then
+            echo "ERROR: APK file is empty."
+            exit 1
+          fi
+
+          SIZE=$(stat -c%s "$APK")
+
+          if [ "$SIZE" -lt 100000 ]; then
+            echo "ERROR: APK size looks invalid: $SIZE bytes"
+            exit 1
+          fi
+
+          echo "APK exists."
+          echo "APK size: $SIZE bytes"
+
           ls -lh "$APK"
 
+
+      # ============================================================
+      # VERIFY APK WITH AAPT
+      # ============================================================
+
+      - name: Verify APK package
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING APK PACKAGE"
+          echo "========================================"
+
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+
+          AAPT=$(find "$ANDROID_HOME/build-tools" \
+            -name "aapt" \
+            -type f \
+            | sort \
+            | tail -n 1)
+
+          if [ -z "$AAPT" ]; then
+            echo "ERROR: aapt not found."
+            exit 1
+          fi
+
+          echo "Using:"
+          echo "$AAPT"
+
+          "$AAPT" dump badging "$APK" > /tmp/apk-badging.txt
+
+          cat /tmp/apk-badging.txt
+
+          grep -q "package: name='com.friendpost.app'" \
+            /tmp/apk-badging.txt
+
           echo ""
+          echo "APK package verification passed."
+
+
+      # ============================================================
+      # VERIFY APK ACTIVITIES
+      # ============================================================
+
+      - name: Verify APK launcher activity
+        shell: bash
+        run: |
+          set -e
+
           echo "========================================"
-          echo "APK BUILD SUCCESS"
+          echo "VERIFYING APK LAUNCHER"
           echo "========================================"
+
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+
+          AAPT=$(find "$ANDROID_HOME/build-tools" \
+            -name "aapt" \
+            -type f \
+            | sort \
+            | tail -n 1)
+
+          "$AAPT" dump badging "$APK" > /tmp/apk-badging.txt
+
+          grep -q "launchable-activity" \
+            /tmp/apk-badging.txt
+
+          echo "Launcher activity found."
+          grep "launchable-activity" /tmp/apk-badging.txt
+
+
+      # ============================================================
+      # APK SHA256
+      # ============================================================
+
+      - name: Generate APK checksum
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "GENERATING APK SHA256"
+          echo "========================================"
+
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+
+          sha256sum "$APK" | tee \
+            build/app/outputs/flutter-apk/app-release.apk.sha256
+
+          echo ""
+          echo "Checksum generated."
+
+
+      # ============================================================
+      # UPLOAD APK
+      # ============================================================
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: friend-post-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-release.apk.sha256
           if-no-files-found: error
+
+
+      # ============================================================
+      # FINAL SUCCESS
+      # ============================================================
+
+      - name: Build verification summary
+        shell: bash
+        run: |
+          echo ""
+          echo "========================================"
+          echo "FRIEND POST APK BUILD SUCCESS"
+          echo "========================================"
+          echo ""
+          echo "Flutter: verified"
+          echo "Dependencies: verified"
+          echo "Firebase: verified"
+          echo "Android package: verified"
+          echo "V1 embedding: verified"
+          echo "Flutter analyze: passed"
+          echo "APK: created"
+          echo "APK package: verified"
+          echo "Launcher: verified"
+          echo "SHA256: generated"
+          echo ""
+          echo "APK is ready."
