@@ -2,54 +2,39 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
-import 'firebase_options.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  FirebaseInitializationResult firebaseResult;
+  bool firebaseReady = false;
+  String? firebaseError;
 
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-
-    firebaseResult = const FirebaseInitializationResult.success();
+    await Firebase.initializeApp();
+    firebaseReady = true;
   } catch (e) {
+    firebaseError = e.toString();
     debugPrint('Firebase initialization error: $e');
-
-    firebaseResult = FirebaseInitializationResult.failure(
-      e.toString(),
-    );
   }
 
   runApp(
     FriendPostApp(
-      firebaseResult: firebaseResult,
+      firebaseReady: firebaseReady,
+      firebaseError: firebaseError,
     ),
   );
 }
 
-class FirebaseInitializationResult {
-  final bool success;
-  final String? error;
-
-  const FirebaseInitializationResult.success()
-      : success = true,
-        error = null;
-
-  const FirebaseInitializationResult.failure(this.error)
-      : success = false;
-}
-
 class FriendPostApp extends StatelessWidget {
-  final FirebaseInitializationResult firebaseResult;
+  final bool firebaseReady;
+  final String? firebaseError;
 
   const FriendPostApp({
     super.key,
-    required this.firebaseResult,
+    required this.firebaseReady,
+    this.firebaseError,
   });
 
   @override
@@ -62,10 +47,10 @@ class FriendPostApp extends StatelessWidget {
         colorSchemeSeed: Colors.blue,
         brightness: Brightness.light,
       ),
-      home: firebaseResult.success
+      home: firebaseReady
           ? const AuthGate()
           : FirebaseErrorScreen(
-              error: firebaseResult.error,
+              error: firebaseError,
             ),
     );
   }
@@ -88,8 +73,8 @@ class AuthGate extends StatelessWidget {
         }
 
         if (snapshot.hasError) {
-          return const FirebaseErrorScreen(
-            error: 'Firebase Authentication চালু করা যায়নি।',
+          return FirebaseErrorScreen(
+            error: snapshot.error.toString(),
           );
         }
 
@@ -136,8 +121,7 @@ class FirebaseErrorScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Firebase configuration-এ সমস্যা হয়েছে। '
-                  'অ্যাপ crash না করে এখানে সমস্যাটি দেখানো হবে।',
+                  'Firebase চালু করতে সমস্যা হয়েছে।',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
