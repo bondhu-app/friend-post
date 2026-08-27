@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+
   workflow_dispatch:
 
 permissions:
@@ -17,14 +18,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -35,28 +35,131 @@ jobs:
       - name: Show Flutter version
         run: flutter --version
 
-      - name: Flutter Doctor
-        run: flutter doctor -v
-
-      - name: Check Flutter project
+      - name: Check project structure
         run: |
-          test -f pubspec.yaml
-          test -d android
-          test -d lib
-          echo "Flutter project found successfully."
+          set -e
 
-      - name: Install dependencies
-        run: flutter pub get
+          echo "========================================"
+          echo "CHECKING FRIEND POST PROJECT"
+          echo "========================================"
 
-      - name: Analyze project
-        run: flutter analyze
+          if [ ! -f "pubspec.yaml" ]; then
+            echo "ERROR: pubspec.yaml not found"
+            exit 1
+          fi
+
+          if [ ! -d "lib" ]; then
+            echo "ERROR: lib directory not found"
+            exit 1
+          fi
+
+          if [ ! -d "android" ]; then
+            echo "ERROR: android directory not found"
+            exit 1
+          fi
+
+          echo "Flutter project detected successfully."
+
+          echo ""
+          echo "Project files:"
+          ls -la
+
+          echo ""
+          echo "Android directory:"
+          ls -la android
+
+          echo ""
+          echo "Lib directory:"
+          ls -la lib
+
+      - name: Install Flutter dependencies
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "RUNNING FLUTTER PUB GET"
+          echo "========================================"
+
+          flutter pub get
+
+      - name: Verify Firebase configuration
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING FIREBASE CONFIGURATION"
+          echo "========================================"
+
+          if [ ! -f "lib/firebase_options.dart" ]; then
+            echo "ERROR: lib/firebase_options.dart not found"
+            echo ""
+            echo "Run flutterfire configure locally and commit"
+            echo "lib/firebase_options.dart to the repository."
+            exit 1
+          fi
+
+          echo "Firebase configuration found."
+
+      - name: Check Android project
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING ANDROID PROJECT"
+          echo "========================================"
+
+          if [ ! -f "android/gradlew" ]; then
+            echo "ERROR: android/gradlew not found"
+            exit 1
+          fi
+
+          if [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
+            echo "ERROR: gradle-wrapper.properties not found"
+            exit 1
+          fi
+
+          chmod +x android/gradlew
+
+          echo "Android Gradle project found."
+
+      - name: Flutter analyze
+        run: |
+          echo "========================================"
+          echo "RUNNING FLUTTER ANALYZE"
+          echo "========================================"
+
+          flutter analyze
 
       - name: Build release APK
-        run: flutter build apk --release
+        run: |
+          set -e
 
-      - name: Upload APK
+          echo "========================================"
+          echo "BUILDING FRIEND POST RELEASE APK"
+          echo "========================================"
+
+          flutter build apk --release
+
+      - name: Check APK
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING APK"
+          echo "========================================"
+
+          if [ ! -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+            echo "ERROR: Release APK was not created"
+            exit 1
+          fi
+
+          ls -lh build/app/outputs/flutter-apk/app-release.apk
+
+          echo "APK BUILD SUCCESSFUL."
+
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: friend-post-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
+          if
