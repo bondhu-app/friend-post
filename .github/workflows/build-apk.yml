@@ -12,13 +12,13 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build and Verify Release APK
+    name: Build Friend Post Release APK
     runs-on: ubuntu-latest
 
     steps:
 
       # ============================================================
-      # 1. CHECKOUT
+      # CHECKOUT
       # ============================================================
 
       - name: Checkout repository
@@ -26,7 +26,7 @@ jobs:
 
 
       # ============================================================
-      # 2. JAVA 17
+      # JAVA 17
       # ============================================================
 
       - name: Setup Java 17
@@ -38,7 +38,7 @@ jobs:
 
 
       # ============================================================
-      # 3. FLUTTER
+      # FLUTTER
       # ============================================================
 
       - name: Setup Flutter
@@ -50,32 +50,26 @@ jobs:
 
 
       # ============================================================
-      # 4. CHECK FLUTTER
+      # CHECK FLUTTER
       # ============================================================
 
       - name: Check Flutter
-        shell: bash
         run: |
           set -e
-
-          echo "========================================"
-          echo "FLUTTER VERSION"
-          echo "========================================"
-
           flutter --version
+          dart --version
 
 
       # ============================================================
-      # 5. CHECK BASIC PROJECT
+      # VERIFY MAIN PROJECT
       # ============================================================
 
-      - name: Check Flutter project
-        shell: bash
+      - name: Verify Flutter project
         run: |
           set -e
 
           echo "========================================"
-          echo "CHECKING FLUTTER PROJECT"
+          echo "VERIFYING FLUTTER PROJECT"
           echo "========================================"
 
           test -f pubspec.yaml
@@ -88,75 +82,116 @@ jobs:
 
 
       # ============================================================
-      # 6. REPAIR ANDROID PROJECT
-      #
-      # If Android files are incomplete, Flutter regenerates them.
-      # Existing lib/ and pubspec.yaml are preserved.
+      # VERIFY FIREBASE JSON
       # ============================================================
 
-      - name: Repair Android project
-        shell: bash
+      - name: Verify Firebase configuration
         run: |
           set -e
 
           echo "========================================"
-          echo "REPAIRING ANDROID PROJECT"
+          echo "VERIFYING FIREBASE"
           echo "========================================"
 
-          NEED_REPAIR=0
+          FIREBASE="android/app/google-services.json"
 
-          if [ ! -f "android/app/build.gradle.kts" ]; then
-            NEED_REPAIR=1
+          if [ ! -f "$FIREBASE" ]; then
+            echo "Firebase file is not available yet."
+            echo "It will be restored after Android project creation."
           fi
 
-          if [ ! -f "android/settings.gradle" ]; then
-            NEED_REPAIR=1
-          fi
 
-          if [ ! -f "android/app/src/main/AndroidManifest.xml" ]; then
-            NEED_REPAIR=1
-          fi
+      # ============================================================
+      # BACKUP FIREBASE JSON
+      # ============================================================
 
-          if [ ! -f "android/gradlew" ]; then
-            NEED_REPAIR=1
-          fi
+      - name: Backup Firebase configuration
+        run: |
+          set -e
 
-          if [ "$NEED_REPAIR" -eq 1 ]; then
-
-            echo ""
-            echo "Android project is incomplete."
-            echo "Regenerating Android platform files..."
-
-            flutter create \
-              --platforms=android \
-              --org com.friendpost \
-              --project-name friend_post \
-              --android-language kotlin \
-              .
-
-            echo ""
-            echo "Android project regenerated."
-
+          if [ -f "android/app/google-services.json" ]; then
+            cp android/app/google-services.json /tmp/google-services.json
+            echo "Existing Firebase configuration backed up."
           else
-
-            echo ""
-            echo "Android project already contains required files."
-
+            echo "No existing Android Firebase file found."
           fi
 
 
       # ============================================================
-      # 7. VERIFY ANDROID FILES
+      # REMOVE BROKEN ANDROID PROJECT
       # ============================================================
 
-      - name: Verify Android project
-        shell: bash
+      - name: Prepare Android project
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING ANDROID PROJECT"
+          echo "PREPARING ANDROID PROJECT"
           echo "========================================"
 
-          required_files=(
-            "android/app/buildbuild
+          rm -rf android
+
+          flutter create \
+            --platforms=android \
+            --org com.friendpost \
+            --project-name friend_post \
+            --android-language kotlin \
+            .
+
+          echo "Fresh Android project created."
+
+
+      # ============================================================
+      # RESTORE FIREBASE JSON
+      # ============================================================
+
+      - name: Restore Firebase configuration
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "RESTORING FIREBASE"
+          echo "========================================"
+
+          if [ ! -f "/tmp/google-services.json" ]; then
+            echo "ERROR: Firebase configuration backup not found."
+            exit 1
+          fi
+
+          mkdir -p android/app
+
+          cp /tmp/google-services.json \
+            android/app/google-services.json
+
+          echo "Firebase configuration restored."
+
+
+      # ============================================================
+      # CONFIGURE ANDROID PACKAGE
+      # ============================================================
+
+      - name: Configure Android package
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING ANDROID PACKAGE"
+          echo "========================================"
+
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("android/app/build.gradle.kts")
+          text = path.read_text()
+
+          text = re.sub(
+              r'namespace\s*=\s*"[^"]*"',
+              'namespace = "com.friendpost.app"',
+              text,
+              count=1,
+          )
+
+          text = re.sub(
+              r'applicationId\s*=\s*"[^"]*"',
+              'applicationId = "com.friend
