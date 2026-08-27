@@ -1,7 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/auth/signup_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,7 +30,60 @@ class FriendPostApp extends StatelessWidget {
         brightness: Brightness.light,
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: const FriendPostHomePage(),
+      home: const AuthGate(),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SplashScreen();
+        }
+
+        if (snapshot.hasData) {
+          return const FriendPostHomePage();
+        }
+
+        return const LoginScreen();
+      },
+    );
+  }
+}
+
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.people_alt_rounded,
+              size: 80,
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Friend Post',
+              style: TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 20),
+            CircularProgressIndicator(),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -35,8 +91,14 @@ class FriendPostApp extends StatelessWidget {
 class FriendPostHomePage extends StatelessWidget {
   const FriendPostHomePage({super.key});
 
+  Future<void> _logout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -45,7 +107,13 @@ class FriendPostHomePage extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        centerTitle: false,
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            onPressed: () => _logout(context),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
       ),
       body: Center(
         child: Padding(
@@ -66,27 +134,33 @@ class FriendPostHomePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              Text(
+                'স্বাগতম, ${user?.displayName?.isNotEmpty == true ? user!.displayName : user?.email ?? 'বন্ধু'}!',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 20),
               const Text(
-                'বন্ধুদের সাথে যুক্ত থাকুন, পোস্ট ও ছবি শেয়ার করুন, '
-                'লাইক, কমেন্ট এবং আরও অনেক কিছু করুন।',
+                'আপনি সফলভাবে Friend Post-এ লগইন করেছেন।',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  height: 1.5,
                 ),
               ),
-              const SizedBox(height: 32),
-              FilledButton(
+              const SizedBox(height: 30),
+              FilledButton.icon(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Friend Post সফলভাবে চালু হয়েছে।',
-                      ),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SignupScreen(),
                     ),
                   );
                 },
-                child: const Text('শুরু করুন'),
+                icon: const Icon(Icons.person_add),
+                label: const Text('নতুন অ্যাকাউন্ট'),
               ),
             ],
           ),
