@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -32,21 +32,425 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter version
+      - name: Check Flutter
         run: flutter --version
 
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Build APK
-        run: flutter build apk --release
-
-      - name: Check APK
+      - name: Backup application files
+        shell: bash
         run: |
           set -e
+
+          echo "========================================"
+          echo "BACKING UP APPLICATION FILES"
+          echo "========================================"
+
+          mkdir -p /tmp/friendpost_backup
+
+          cp pubspec.yaml /tmp/friendpost_backup/pubspec.yaml
+
+          if [ -d "lib" ]; then
+            cp -R lib /tmp/friendpost_backup/lib
+          fi
+
+          if [ -d "assets" ]; then
+            cp -R assets /tmp/friendpost_backup/assets
+          fi
+
+          if [ -f "android/app/google-services.json" ]; then
+            cp android/app/google-services.json \
+              /tmp/friendpost_backup/google-services.json
+          fi
+
+          echo "Application files backed up."
+
+      - name: Create fresh Flutter Android project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CREATING FRESH FLUTTER PROJECT"
+          echo "========================================"
+
+          rm -rf android
+
+          flutter create \
+            --platforms=android \
+            --org com.friendpost \
+            --project-name friend_post \
+            --android-language kotlin \
+            .
+
+          echo "Fresh supported Android project created."
+
+      - name: Restore application files
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "RESTORING APPLICATION FILES"
+          echo "========================================"
+
+          cp /tmp/friendpost_backup/pubspec.yaml \
+            pubspec.yaml
+
+          if [ -d "/tmp/friendpost_backup/lib" ]; then
+            rm -rf lib
+            cp -R /tmp/friendpost_backup/lib lib
+          fi
+
+          if [ -d "/tmp/friendpost_backup/assets" ]; then
+            rm -rf assets
+            cp -R /tmp/friendpost_backup/assets assets
+          fi
+
+          if [ -f "/tmp/friendpost_backup/google-services.json" ]; then
+            mkdir -p android/app
+            cp /tmp/friendpost_backup/google-services.json \
+              android/app/google-services.json
+          fi
+
+          echo "Application files restored."
+
+      - name: Configure Android package
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING ANDROID PACKAGE"
+          echo "========================================"
+
+          FILE="android/app/build.gradle.kts"
+
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: $FILE not found."
+            exit 1
+          fi
+
+          python3 - "$FILE" <<'PY'
+          from pathlib import Path
+          import sys
+          import re
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          text = re.sub(
+              r'namespace\s*=\s*"[^"]+"',
+              'namespace = "com.friendpost.app"',
+              text,
+              count=1,
+          )
+
+          text = re.sub(
+              r'applicationId\s*=\s*"[^"]+"',
+              'applicationId = "com.friendpost.app"',
+              text,
+              count=1,
+          )
+
+          path.write_text(text)
+
+          print("Android package configured:")
+          print("com.friendpost.app")
+          PY
+
+      - name: Configure Google Services
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING GOOGLE SERVICES"
+          echo "========================================"
+
+          FILE="android/app/build.gradle.kts"
+
+          if [ -f "android/app/google-services.json" ]; then
+            python3 - "$FILE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          plugin = 'id("com.google.gms.google-services")'
+
+          if plugin not in text:
+              text = text.replace(
+                  "plugins {",
+                  "plugins {\n    " + plugin,
+                  1,
+              )
+
+          path.write_text(text)
+
+          print("Google Services plugin configured.")
+          PY
+          else
+            echo "google-services.json not found."
+            echo "Continuing without Google Services plugin."
+          fi
+
+      - name: Configure Java and Kotlin
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING JAVA AND KOTLIN"
+          echo "========================================"
+
+          FILE="android/app/build.gradle.kts"
+
+          python3 - "$FILE" <<'PY'
+          from pathlib import Path
+          import sys
+          import re
+
+          path = Path(sys.argv[1])
+          text = path.read_text()
+
+          def remove_block(source, name):
+              pattern = re.compile(
+                  rf'(?m)^[ \t]*{re.escape(name)}\s*\{{'
+              )
+
+              while True:
+                  match = pattern.search(source)
+
+                  if not match:
+                      break
+
+                  start = match.start()
+                  brace_start = source.find("{", match.start())
+
+                  depth = 0
+                  end = None
+
+                  for i in range(brace_start, len(source)):
+                      if source[i] == "{":
+                          depth += 1
+                      elif source[i] == "}":
+                          depth -= 1
+
+                          if depth == 0:
+                              end = i + 1
+                              break
+
+                  if end is None:
+                      raise SystemExit(
+                          f"Could not parse {name} block."
+                      )
+
+                  source = source[:start] + source[end:]
+
+              return source
+
+          text = remove_block(text, "compileOptions")
+          text = remove_block(text, "kotlinOptions")
+
+          android_match = re.search(
+              r'(?m)^android\s*\{',
+              text,
+          )
+
+          if not android_match:
+              raise SystemExit(
+                  "android block not found."
+              )
+
+          android_open = text.find(
+              "{",
+              android_match.start(),
+          )
+
+          depth = 0
+          android_end = None
+
+          for i in range(android_open, len(text)):
+              if text[i] == "{":
+                  depth += 1
+              elif text[i] == "}":
+                  depth -= 1
+
+                  if depth == 0:
+                      android_end = i
+                      break
+
+          if android_end is None:
+              raise SystemExit(
+                  "Could not find android block end."
+              )
+
+          compile_options = """
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          """
+
+          text = (
+              text[:android_end]
+              + "\n"
+              + compile_options
+              + text[android_end:]
+          )
+
+          if "kotlin {" not in text:
+              text += """
+
+          kotlin {
+              jvmToolchain(17)
+          }
+          """
+
+          path.write_text(text)
+
+          print("Java 17 configured.")
+          print("Kotlin JVM 17 configured.")
+          PY
+
+      - name: Verify Android project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING ANDROID PROJECT"
+          echo "========================================"
+
+          required_files=(
+            "android/app/build.gradle.kts"
+            "android/settings.gradle.kts"
+            "android/build.gradle.kts"
+            "android/gradlew"
+            "android/gradle/wrapper/gradle-wrapper.properties"
+            "android/app/src/main/AndroidManifest.xml"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "ERROR: Missing file: $file"
+              exit 1
+            fi
+
+            echo "OK: $file"
+          done
+
+          echo ""
+          echo "Android project is valid."
+
+      - name: Verify Android package
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING ANDROID PACKAGE"
+          echo "========================================"
+
+          grep -q 'namespace = "com.friendpost.app"' \
+            android/app/build.gradle.kts
+
+          grep -q 'applicationId = "com.friendpost.app"' \
+            android/app/build.gradle.kts
+
+          echo "Android package verified:"
+          echo "com.friendpost.app"
+
+      - name: Verify Firebase
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING FIREBASE"
+          echo "========================================"
+
+          if [ -f "android/app/google-services.json" ]; then
+
+            grep -q '"project_id": "friend-post-fbfdd"' \
+              android/app/google-services.json
+
+            grep -q '"package_name": "com.friendpost.app"' \
+              android/app/google-services.json
+
+            echo "Firebase configuration verified."
+
+          else
+
+            echo "Firebase configuration not present."
+            echo "Continuing without Google Services."
+
+          fi
+
+      - name: Get dependencies
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "GETTING FLUTTER DEPENDENCIES"
+          echo "========================================"
+
+          flutter pub get
+
+      - name: Check Android V1 embedding
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING ANDROID V1 EMBEDDING"
+          echo "========================================"
+
+          if grep -RInE \
+            --exclude-dir=.git \
+            --exclude-dir=build \
+            --exclude-dir=.gradle \
+            --exclude-dir=.dart_tool \
+            "io\.flutter\.app\.FlutterActivity|io\.flutter\.app\.FlutterApplication|PluginRegistry\.Registrar|FlutterActivityDelegate|FlutterView" \
+            android; then
+
+            echo "ERROR: Legacy Android V1 embedding found."
+            exit 1
+          fi
+
+          echo "No Android V1 embedding found."
+
+      - name: Run Flutter analyze
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "RUNNING FLUTTER ANALYZE"
+          echo "========================================"
+
+          flutter analyze
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "BUILDING RELEASE APK"
+          echo "========================================"
+
+          flutter build apk --release
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING APK"
+          echo "========================================"
 
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
@@ -60,7 +464,11 @@ jobs:
             exit 1
           fi
 
-          echo "APK created successfully:"
+          SIZE=$(stat -c%s "$APK")
+
+          echo "APK successfully created."
+          echo "APK size: $SIZE bytes"
+
           ls -lh "$APK"
 
       - name: Upload APK
@@ -69,3 +477,18 @@ jobs:
           name: friend-post-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+      - name: Final success
+        run: |
+          echo ""
+          echo "========================================"
+          echo "FRIEND POST APK BUILD SUCCESS"
+          echo "========================================"
+          echo ""
+          echo "Fresh Android project: OK"
+          echo "Android package: OK"
+          echo "Dependencies: OK"
+          echo "Flutter analyze: OK"
+          echo "Release APK: OK"
+          echo ""
+          echo "APK is ready."
