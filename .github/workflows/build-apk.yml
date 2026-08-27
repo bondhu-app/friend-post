@@ -31,72 +31,180 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter version
+      - name: Show Flutter version
         run: flutter --version
 
-      - name: Check Flutter project
+      - name: Inspect repository
+        run: |
+          echo "========================================"
+          echo "FRIEND POST REPOSITORY CHECK"
+          echo "========================================"
+
+          echo ""
+          echo "Current directory:"
+          pwd
+
+          echo ""
+          echo "Repository contents:"
+          find . -maxdepth 2 -type f | sort | head -200
+
+          echo ""
+          echo "Checking required Flutter files..."
+
+          if [ -f "pubspec.yaml" ]; then
+            echo "OK: pubspec.yaml"
+          else
+            echo "ERROR: pubspec.yaml NOT FOUND"
+          fi
+
+          if [ -d "lib" ]; then
+            echo "OK: lib/"
+          else
+            echo "ERROR: lib/ NOT FOUND"
+          fi
+
+          if [ -d "android" ]; then
+            echo "OK: android/"
+          else
+            echo "ERROR: android/ NOT FOUND"
+          fi
+
+          echo ""
+          echo "Checking important files..."
+
+          if [ -f "lib/main.dart" ]; then
+            echo "OK: lib/main.dart"
+          else
+            echo "WARNING: lib/main.dart NOT FOUND"
+          fi
+
+          if [ -f "lib/firebase_options.dart" ]; then
+            echo "OK: lib/firebase_options.dart"
+          else
+            echo "WARNING: lib/firebase_options.dart NOT FOUND"
+          fi
+
+          if [ -f "android/gradlew" ]; then
+            echo "OK: android/gradlew"
+          else
+            echo "WARNING: android/gradlew NOT FOUND"
+          fi
+
+          if [ -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
+            echo "OK: Gradle wrapper"
+          else
+            echo "WARNING: Gradle wrapper NOT FOUND"
+          fi
+
+      - name: Verify Flutter project
         run: |
           set -e
-          echo "Checking Friend Post project..."
 
-          test -f pubspec.yaml
-          test -d lib
-          test -d android
+          echo "========================================"
+          echo "VERIFYING FLUTTER PROJECT"
+          echo "========================================"
 
-          echo "Flutter project OK."
+          if [ ! -f "pubspec.yaml" ]; then
+            echo "ERROR: pubspec.yaml is missing."
+            exit 1
+          fi
+
+          if [ ! -d "lib" ]; then
+            echo "ERROR: lib directory is missing."
+            exit 1
+          fi
+
+          if [ ! -d "android" ]; then
+            echo "ERROR: android directory is missing."
+            exit 1
+          fi
+
+          echo "Flutter project structure is valid."
 
       - name: Install dependencies
-        run: flutter pub get
-
-      - name: Check Firebase configuration
         run: |
           set -e
 
-          if [ ! -f lib/firebase_options.dart ]; then
-            echo "ERROR: lib/firebase_options.dart not found."
-            echo "Please run flutterfire configure and commit the generated file."
+          echo "========================================"
+          echo "FLUTTER PUB GET"
+          echo "========================================"
+
+          flutter pub get
+
+      - name: Check Firebase
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING FIREBASE"
+          echo "========================================"
+
+          if [ ! -f "lib/firebase_options.dart" ]; then
+            echo "ERROR: lib/firebase_options.dart is missing."
+            echo ""
+            echo "Firebase configuration has not been added to the repository."
             exit 1
           fi
 
           echo "Firebase configuration found."
 
-      - name: Check Android project
+      - name: Check Android Gradle
         run: |
           set -e
 
-          if [ ! -f android/gradlew ]; then
-            echo "ERROR: android/gradlew not found."
+          echo "========================================"
+          echo "CHECKING ANDROID GRADLE"
+          echo "========================================"
+
+          if [ ! -f "android/gradlew" ]; then
+            echo "ERROR: android/gradlew is missing."
             exit 1
           fi
 
-          if [ ! -f android/gradle/wrapper/gradle-wrapper.properties ]; then
-            echo "ERROR: Gradle wrapper not found."
+          if [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
+            echo "ERROR: Gradle wrapper is missing."
             exit 1
           fi
 
           chmod +x android/gradlew
 
-          echo "Android project OK."
+          echo "Android Gradle project found."
 
       - name: Flutter analyze
-        run: flutter analyze
+        run: |
+          echo "========================================"
+          echo "FLUTTER ANALYZE"
+          echo "========================================"
 
-      - name: Build release APK
-        run: flutter build apk --release
+          flutter analyze
 
-      - name: Check APK
+      - name: Build APK
         run: |
           set -e
 
-          APK="build/app/outputs/flutter-apk/app-release.apk"
+          echo "========================================"
+          echo "BUILDING FRIEND POST APK"
+          echo "========================================"
 
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not created."
+          flutter build apk --release
+
+      - name: Verify APK
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING APK"
+          echo "========================================"
+
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+
+          if [ ! -f "$APK_PATH" ]; then
+            echo "ERROR: APK was not generated."
             exit 1
           fi
 
-          echo "APK created successfully:"
-          ls -lh "$APK"
+          echo "APK successfully generated:"
+          ls -lh "$APK_PATH"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
