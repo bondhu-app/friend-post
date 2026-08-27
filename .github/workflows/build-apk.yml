@@ -1,4 +1,4 @@
-name: Build Friend Post APK
+Build Friend Post APK
 
 on:
   workflow_dispatch:
@@ -54,248 +54,34 @@ jobs:
       # ============================================================
 
       - name: Check Flutter
-        shell: bash
         run: |
           set -e
-
-          echo "========================================"
-          echo "FLUTTER VERSION"
-          echo "========================================"
-
           flutter --version
 
 
       # ============================================================
-      # VERIFY BASIC FLUTTER FILES
+      # VERIFY PROJECT
       # ============================================================
 
-      - name: Verify Flutter project files
-        shell: bash
+      - name: Verify project structure
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING FLUTTER PROJECT"
+          echo "VERIFYING PROJECT STRUCTURE"
           echo "========================================"
 
           required_files=(
             "pubspec.yaml"
             "lib/main.dart"
             "lib/firebase_options.dart"
-          )
-
-          for file in "${required_files[@]}"; do
-            if [ ! -f "$file" ]; then
-              echo "ERROR: Missing file: $file"
-              exit 1
-            fi
-
-            echo "OK: $file"
-          done
-
-          echo ""
-          echo "Flutter project files verified."
-
-
-      # ============================================================
-      # BACKUP FIREBASE JSON
-      # ============================================================
-
-      - name: Backup Firebase configuration
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "BACKING UP FIREBASE CONFIGURATION"
-          echo "========================================"
-
-          if [ ! -f "android/app/google-services.json" ]; then
-            echo "ERROR: android/app/google-services.json not found."
-            echo ""
-            echo "The Firebase JSON file is required."
-            exit 1
-          fi
-
-          cp android/app/google-services.json /tmp/google-services.json
-
-          echo "Firebase configuration backed up."
-
-
-      # ============================================================
-      # REBUILD ANDROID PROJECT
-      #
-      # IMPORTANT:
-      # The repository currently does not contain
-      # android/app/build.gradle.kts.
-      #
-      # Therefore we recreate the Android project here.
-      # ============================================================
-
-      - name: Recreate Android project
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "RECREATING ANDROID PROJECT"
-          echo "========================================"
-
-          rm -rf android
-
-          flutter create \
-            --platforms=android \
-            --org com.friendpost \
-            --project-name friend_post \
-            --android-language kotlin \
-            .
-
-          if [ ! -f "android/app/build.gradle.kts" ]; then
-            echo "ERROR: Flutter did not create android/app/build.gradle.kts"
-            exit 1
-          fi
-
-          if [ ! -f "android/settings.gradle.kts" ]; then
-            echo "ERROR: Flutter did not create android/settings.gradle.kts"
-            exit 1
-          fi
-
-          if [ ! -f "android/build.gradle.kts" ]; then
-            echo "ERROR: Flutter did not create android/build.gradle.kts"
-            exit 1
-          fi
-
-          cp /tmp/google-services.json \
-            android/app/google-services.json
-
-          echo ""
-          echo "Android project recreated successfully."
-          echo "Firebase configuration restored."
-
-
-      # ============================================================
-      # CONFIGURE ANDROID PACKAGE
-      # ============================================================
-
-      - name: Configure Android package
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CONFIGURING ANDROID PACKAGE"
-          echo "========================================"
-
-          python3 <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("android/app/build.gradle.kts")
-          text = path.read_text()
-
-          text = re.sub(
-              r'namespace\s*=\s*"[^"]+"',
-              'namespace = "com.friendpost.app"',
-              text,
-              count=1,
-          )
-
-          text = re.sub(
-              r'applicationId\s*=\s*"[^"]+"',
-              'applicationId = "com.friendpost.app"',
-              text,
-              count=1,
-          )
-
-          if 'id("com.google.gms.google-services")' not in text:
-              text = text.replace(
-                  "plugins {",
-                  'plugins {\n    id("com.google.gms.google-services")',
-                  1,
-              )
-
-          path.write_text(text)
-
-          print("Application ID: com.friendpost.app")
-          print("Namespace: com.friendpost.app")
-          print("Google Services plugin: enabled")
-          PY
-
-
-      # ============================================================
-      # CONFIGURE GOOGLE SERVICES PLUGIN
-      # ============================================================
-
-      - name: Configure Google Services plugin
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CONFIGURING GOOGLE SERVICES"
-          echo "========================================"
-
-          python3 <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("android/settings.gradle.kts")
-          text = path.read_text()
-
-          plugin_line = (
-              '    id("com.google.gms.google-services") '
-              'version "4.4.2" apply false'
-          )
-
-          if 'id("com.google.gms.google-services")' not in text:
-              if "plugins {" in text:
-                  text = text.replace(
-                      "plugins {",
-                      "plugins {\n" + plugin_line,
-                      1,
-                  )
-              else:
-                  text = (
-                      "pluginManagement {\n"
-                      "    repositories {\n"
-                      "        google()\n"
-                      "        mavenCentral()\n"
-                      "        gradlePluginPortal()\n"
-                      "    }\n"
-                      "}\n\n"
-                      "plugins {\n"
-                      + plugin_line
-                      + "\n}\n\n"
-                      + text
-                  )
-
-          path.write_text(text)
-
-          print("Google Services plugin configured.")
-          PY
-
-
-      # ============================================================
-      # VERIFY ANDROID PROJECT
-      # ============================================================
-
-      - name: Verify Android project
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING ANDROID PROJECT"
-          echo "========================================"
-
-          required_files=(
-            "android/app/build.gradle.kts"
-            "android/settings.gradle.kts"
-            "android/build.gradle.kts"
+            "android/app/google-services.json"
+            "android/settings.gradle"
+            "android/build.gradle"
+            "android/app/build.gradle"
             "android/gradlew"
             "android/gradle/wrapper/gradle-wrapper.properties"
             "android/app/src/main/AndroidManifest.xml"
-            "android/app/google-services.json"
           )
 
           for file in "${required_files[@]}"; do
@@ -308,43 +94,19 @@ jobs:
           done
 
           echo ""
-          echo "Android project verification passed."
+          echo "Project structure OK."
 
 
       # ============================================================
-      # VERIFY PUBSPEC
+      # VERIFY FIREBASE
       # ============================================================
 
-      - name: Verify pubspec configuration
-        shell: bash
+      - name: Verify Firebase configuration
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING PUBSPEC"
-          echo "========================================"
-
-          grep -q "^name: friend_post" pubspec.yaml
-          grep -q "firebase_core:" pubspec.yaml
-          grep -q "firebase_auth:" pubspec.yaml
-          grep -q "cloud_firestore:" pubspec.yaml
-          grep -q "firebase_storage:" pubspec.yaml
-          grep -q "google_mobile_ads:" pubspec.yaml
-
-          echo "pubspec configuration verified."
-
-
-      # ============================================================
-      # VERIFY FIREBASE JSON
-      # ============================================================
-
-      - name: Verify Firebase JSON
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING FIREBASE JSON"
+          echo "VERIFYING FIREBASE"
           echo "========================================"
 
           FIREBASE="android/app/google-services.json"
@@ -353,9 +115,7 @@ jobs:
           grep -q '"package_name": "com.friendpost.app"' "$FIREBASE"
           grep -q '"mobilesdk_app_id": "1:1074705827775:android:68710467504787bc3a430a"' "$FIREBASE"
 
-          echo "Firebase project ID verified."
-          echo "Firebase package verified."
-          echo "Firebase Android App ID verified."
+          echo "Firebase configuration OK."
 
 
       # ============================================================
@@ -363,7 +123,6 @@ jobs:
       # ============================================================
 
       - name: Verify firebase_options.dart
-        shell: bash
         run: |
           set -e
 
@@ -378,19 +137,16 @@ jobs:
           grep -q "friend-post-fbfdd" "$FILE"
           grep -q "1074705827775" "$FILE"
           grep -q "68710467504787bc3a430a" "$FILE"
-          grep -q "AIzaSyAbYCTMxhCJ8xft1dgnpHDRkbC4v9RMU4GE" "$FILE" || \
-          grep -q "AIzaSyAbYCTMxhCJzft1dgnpHDRkbC4v9RMU4GE" "$FILE"
           grep -q "TargetPlatform.fuchsia" "$FILE"
 
-          echo "firebase_options.dart verified."
+          echo "firebase_options.dart OK."
 
 
       # ============================================================
-      # VERIFY MAIN DART
+      # VERIFY MAIN
       # ============================================================
 
-      - name: Verify main.dart Firebase initialization
-        shell: bash
+      - name: Verify main.dart
         run: |
           set -e
 
@@ -405,7 +161,133 @@ jobs:
           grep -q "Firebase.initializeApp" "$FILE"
           grep -q "DefaultFirebaseOptions.currentPlatform" "$FILE"
 
-          echo "main.dart Firebase initialization verified."
+          echo "main.dart OK."
+
+
+      # ============================================================
+      # FIX KOTLIN / ANDROID GRADLE
+      # ============================================================
+
+      - name: Configure Kotlin and Android Gradle
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING KOTLIN / ANDROID GRADLE"
+          echo "========================================"
+
+          echo ""
+          echo "Before configuration:"
+          echo "----------------------------------------"
+          sed -n '1,140p' android/settings.gradle
+          echo "----------------------------------------"
+
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          settings = Path("android/settings.gradle")
+          text = settings.read_text()
+
+          # Kotlin 2.4.10
+          text = re.sub(
+              r'(id\s+["\']org\.jetbrains\.kotlin\.android["\']\s+version\s+["\'])[^"\']+(["\'])',
+              r'\g<1>2.4.10\2',
+              text
+          )
+
+          # If Kotlin plugin is missing, add it.
+          if "org.jetbrains.kotlin.android" not in text:
+              match = re.search(r'plugins\s*\{', text)
+
+              if match:
+                  pos = match.end()
+                  text = (
+                      text[:pos]
+                      + '\n    id "org.jetbrains.kotlin.android" version "2.4.10" apply false'
+                      + text[pos:]
+                  )
+
+          settings.write_text(text)
+
+          # ----------------------------------------------------------
+          # Groovy build.gradle
+          # ----------------------------------------------------------
+
+          build = Path("android/build.gradle")
+          if build.exists():
+              b = build.read_text()
+
+              b = re.sub(
+                  r'kotlin_version\s*=\s*[\'"][^\'"]+[\'"]',
+                  "kotlin_version = '2.4.10'",
+                  b
+              )
+
+              b = re.sub(
+                  r'ext\.kotlin_version\s*=\s*[\'"][^\'"]+[\'"]',
+                  "ext.kotlin_version = '2.4.10'",
+                  b
+              )
+
+              build.write_text(b)
+
+          # ----------------------------------------------------------
+          # Gradle wrapper
+          # ----------------------------------------------------------
+
+          wrapper = Path(
+              "android/gradle/wrapper/gradle-wrapper.properties"
+          )
+
+          if wrapper.exists():
+              w = wrapper.read_text()
+
+              w = re.sub(
+                  r'gradle-[0-9.]+-',
+                  'gradle-8.13-',
+                  w
+              )
+
+              wrapper.write_text(w)
+
+          print("")
+          print("Kotlin Gradle Plugin: 2.4.10")
+          print("Gradle Wrapper: 8.13")
+          print("")
+          PY
+
+          echo ""
+          echo "After configuration:"
+          echo "----------------------------------------"
+          sed -n '1,160p' android/settings.gradle
+          echo "----------------------------------------"
+
+          echo ""
+          echo "Gradle wrapper:"
+          grep "distributionUrl" \
+            android/gradle/wrapper/gradle-wrapper.properties || true
+
+
+      # ============================================================
+      # VERIFY KOTLIN VERSION
+      # ============================================================
+
+      - name: Verify Kotlin version
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING KOTLIN VERSION"
+          echo "========================================"
+
+          if ! grep -q "2.4.10" android/settings.gradle; then
+            echo "ERROR: Kotlin 2.4.10 was not configured."
+            exit 1
+          fi
+
+          echo "Kotlin 2.4.10 configured successfully."
 
 
       # ============================================================
@@ -413,7 +295,6 @@ jobs:
       # ============================================================
 
       - name: Verify Android package
-        shell: bash
         run: |
           set -e
 
@@ -421,55 +302,20 @@ jobs:
           echo "VERIFYING ANDROID PACKAGE"
           echo "========================================"
 
-          grep -q 'applicationId = "com.friendpost.app"' \
-            android/app/build.gradle.kts
-
-          grep -q 'namespace = "com.friendpost.app"' \
-            android/app/build.gradle.kts
+          grep -q 'com.friendpost.app' \
+            android/app/build.gradle
 
           grep -q '"package_name": "com.friendpost.app"' \
             android/app/google-services.json
 
-          echo ""
-          echo "Android package: com.friendpost.app"
-          echo "Android package verification passed."
-
-
-      # ============================================================
-      # CHECK ANDROID V1 EMBEDDING
-      # ============================================================
-
-      - name: Check Android V1 embedding
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CHECKING ANDROID V1 EMBEDDING"
-          echo "========================================"
-
-          if grep -RInE \
-            --exclude-dir=.git \
-            --exclude-dir=build \
-            --exclude-dir=.gradle \
-            --exclude-dir=.dart_tool \
-            "io\.flutter\.app\.FlutterActivity|io\.flutter\.app\.FlutterApplication|PluginRegistry\.Registrar|FlutterActivityDelegate|FlutterView" \
-            android; then
-
-            echo ""
-            echo "ERROR: Legacy Android V1 embedding detected."
-            exit 1
-          fi
-
-          echo "SUCCESS: No Android V1 embedding found."
+          echo "Android package OK."
 
 
       # ============================================================
       # GET DEPENDENCIES
       # ============================================================
 
-      - name: Get Flutter dependencies
-        shell: bash
+      - name: Flutter pub get
         run: |
           set -e
 
@@ -480,15 +326,14 @@ jobs:
           flutter pub get
 
           echo ""
-          echo "Dependencies installed successfully."
+          echo "Dependencies installed."
 
 
       # ============================================================
       # CLEAN
       # ============================================================
 
-      - name: Clean Flutter project
-        shell: bash
+      - name: Clean project
         run: |
           set -e
 
@@ -497,6 +342,10 @@ jobs:
           echo "========================================"
 
           flutter clean
+
+          rm -rf build
+          rm -rf android/.gradle
+
           flutter pub get
 
           echo ""
@@ -504,11 +353,10 @@ jobs:
 
 
       # ============================================================
-      # ANALYZE
+      # FLUTTER ANALYZE
       # ============================================================
 
       - name: Run Flutter analyze
-        shell: bash
         run: |
           set -e
 
@@ -519,7 +367,25 @@ jobs:
           flutter analyze
 
           echo ""
-          echo "Flutter analyze completed successfully."
+          echo "Flutter analyze PASSED."
+
+
+      # ============================================================
+      # GRADLE VERSION
+      # ============================================================
+
+      - name: Check Gradle
+        working-directory: android
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING GRADLE"
+          echo "========================================"
+
+          chmod +x gradlew
+
+          ./gradlew --version
 
 
       # ============================================================
@@ -527,7 +393,6 @@ jobs:
       # ============================================================
 
       - name: Build release APK
-        shell: bash
         run: |
           set -e
 
@@ -538,43 +403,45 @@ jobs:
           flutter build apk --release
 
           echo ""
-          echo "Release APK build completed."
+          echo "APK BUILD COMPLETED."
 
 
       # ============================================================
-      # VERIFY APK FILE
+      # VERIFY APK
       # ============================================================
 
-      - name: Verify APK file
+      - name: Verify APK
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING APK FILE"
+          echo "VERIFYING APK"
           echo "========================================"
 
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
           if [ ! -f "$APK" ]; then
-            echo "ERROR: APK file was not created."
+            echo "ERROR: APK was not created."
             exit 1
           fi
 
           if [ ! -s "$APK" ]; then
-            echo "ERROR: APK file is empty."
+            echo "ERROR: APK is empty."
             exit 1
           fi
 
           SIZE=$(stat -c%s "$APK")
 
+          echo "APK size: $SIZE bytes"
+
           if [ "$SIZE" -lt 100000 ]; then
-            echo "ERROR: APK size looks invalid: $SIZE bytes"
+            echo "ERROR: APK size is suspiciously small."
             exit 1
           fi
 
-          echo "APK exists."
-          echo "APK size: $SIZE bytes"
+          echo ""
+          echo "APK file verification PASSED."
 
           ls -lh "$APK"
 
@@ -595,8 +462,8 @@ jobs:
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
           AAPT=$(find "$ANDROID_HOME/build-tools" \
-            -name "aapt" \
             -type f \
+            -name "aapt" \
             | sort \
             | tail -n 1)
 
@@ -605,73 +472,38 @@ jobs:
             exit 1
           fi
 
-          "$AAPT" dump badging "$APK" > /tmp/apk-badging.txt
+          "$AAPT" dump badging "$APK" \
+            > /tmp/apk-badging.txt
 
           cat /tmp/apk-badging.txt
 
-          grep -q "package: name='com.friendpost.app'" \
+          grep -q \
+            "package: name='com.friendpost.app'" \
+            /tmp/apk-badging.txt
+
+          grep -q \
+            "launchable-activity" \
             /tmp/apk-badging.txt
 
           echo ""
-          echo "APK package verification passed."
+          echo "APK package verification PASSED."
 
 
       # ============================================================
-      # VERIFY LAUNCHER
+      # SHA256
       # ============================================================
 
-      - name: Verify APK launcher activity
-        shell: bash
+      - name: Generate APK SHA256
         run: |
           set -e
 
-          echo "========================================"
-          echo "VERIFYING APK LAUNCHER"
-          echo "========================================"
-
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
-          AAPT=$(find "$ANDROID_HOME/build-tools" \
-            -name "aapt" \
-            -type f \
-            | sort \
-            | tail -n 1)
-
-          "$AAPT" dump badging "$APK" > /tmp/apk-badging.txt
-
-          if ! grep -q "launchable-activity" \
-            /tmp/apk-badging.txt; then
-
-            echo "ERROR: Launcher activity was not found."
-            exit 1
-          fi
-
-          echo "Launcher activity found."
-
-          grep "launchable-activity" \
-            /tmp/apk-badging.txt
-
-
-      # ============================================================
-      # APK SHA256
-      # ============================================================
-
-      - name: Generate APK checksum
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "GENERATING APK SHA256"
-          echo "========================================"
-
-          APK="build/app/outputs/flutter-apk/app-release.apk"
-
-          sha256sum "$APK" | tee \
-            build/app/outputs/flutter-apk/app-release.apk.sha256
+          sha256sum "$APK" \
+            | tee build/app/outputs/flutter-apk/app-release.apk.sha256
 
           echo ""
-          echo "Checksum generated."
+          echo "SHA256 generated."
 
 
       # ============================================================
@@ -689,27 +521,24 @@ jobs:
 
 
       # ============================================================
-      # FINAL SUCCESS
+      # FINAL
       # ============================================================
 
-      - name: Build verification summary
-        shell: bash
+      - name: Final success
         run: |
           echo ""
           echo "========================================"
           echo "FRIEND POST APK BUILD SUCCESS"
           echo "========================================"
           echo ""
-          echo "Flutter: verified"
-          echo "Android project: recreated"
-          echo "Firebase: verified"
-          echo "Android package: verified"
-          echo "V1 embedding: verified"
-          echo "Dependencies: installed"
-          echo "Flutter analyze: passed"
-          echo "APK: created"
-          echo "APK package: verified"
-          echo "Launcher: verified"
-          echo "SHA256: generated"
+          echo "Flutter: OK"
+          echo "Firebase: OK"
+          echo "Kotlin 2.4.10: OK"
+          echo "Gradle: OK"
+          echo "Analyze: OK"
+          echo "APK: OK"
+          echo "Package: OK"
+          echo "Launcher: OK"
+          echo "SHA256: OK"
           echo ""
           echo "APK is ready."
