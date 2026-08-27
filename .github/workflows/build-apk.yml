@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build Friend Post Release APK
+    name: Build and Verify Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -66,16 +66,16 @@ jobs:
 
 
       # ============================================================
-      # BASIC FILES
+      # VERIFY PROJECT STRUCTURE
       # ============================================================
 
-      - name: Verify basic project files
+      - name: Verify project structure
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING BASIC PROJECT FILES"
+          echo "VERIFYING PROJECT STRUCTURE"
           echo "========================================"
 
           required_files=(
@@ -83,6 +83,11 @@ jobs:
             "lib/main.dart"
             "lib/firebase_options.dart"
             "android/app/google-services.json"
+            "android/app/build.gradle.kts"
+            "android/settings.gradle.kts"
+            "android/build.gradle.kts"
+            "android/gradle/wrapper/gradle-wrapper.properties"
+            "android/app/src/main/AndroidManifest.xml"
           )
 
           for file in "${required_files[@]}"; do
@@ -95,241 +100,142 @@ jobs:
           done
 
           echo ""
-          echo "Basic project files verified."
+          echo "Project structure verification passed."
 
 
       # ============================================================
-      # BACKUP FIREBASE
+      # CREATE GRADLE WRAPPER IF MISSING
       # ============================================================
 
-      - name: Backup Firebase configuration
+      - name: Ensure Gradle wrapper exists
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "BACKING UP FIREBASE CONFIGURATION"
+          echo "ENSURING GRADLE WRAPPER"
           echo "========================================"
-
-          cp android/app/google-services.json \
-            /tmp/google-services.json
-
-          echo "Firebase configuration backed up."
-
-
-      # ============================================================
-      # GET DEPENDENCIES
-      # ============================================================
-
-      - name: Get Flutter dependencies
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "GETTING FLUTTER DEPENDENCIES"
-          echo "========================================"
-
-          flutter pub get
-
-          echo ""
-          echo "Dependencies installed."
-
-
-      # ============================================================
-      # REPAIR ANDROID PROJECT
-      # ============================================================
-
-      - name: Repair Android project
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CHECKING ANDROID PROJECT"
-          echo "========================================"
-
-          NEED_REPAIR="false"
 
           if [ ! -f "android/gradlew" ]; then
-            echo "Missing android/gradlew"
-            NEED_REPAIR="true"
+            echo "android/gradlew is missing."
+            echo "Generating Android project wrapper..."
+
+            cd android
+
+            gradle wrapper --gradle-version 8.14
+
+            cd ..
           fi
 
-          if [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
-            echo "Missing Gradle wrapper"
-            NEED_REPAIR="true"
+          if [ ! -f "android/gradlew" ]; then
+            echo "ERROR: android/gradlew still missing."
+            exit 1
           fi
 
-          if [ ! -f "android/settings.gradle.kts" ] && \
-             [ ! -f "android/settings.gradle" ]; then
-            echo "Missing settings.gradle"
-            NEED_REPAIR="true"
-          fi
+          chmod +x android/gradlew
 
-          if [ ! -f "android/app/build.gradle.kts" ] && \
-             [ ! -f "android/app/build.gradle" ]; then
-            echo "Missing Android app Gradle file"
-            NEED_REPAIR="true"
-          fi
-
-          if [ "$NEED_REPAIR" = "true" ]; then
-
-            echo ""
-            echo "Android project is incomplete."
-            echo "Creating a fresh Android project..."
-
-            rm -rf android
-
-            flutter create \
-              --platforms=android \
-              --org com.friendpost \
-              --project-name friend_post \
-              --android-language kotlin \
-              .
-
-            cp /tmp/google-services.json \
-              android/app/google-services.json
-
-            echo ""
-            echo "Fresh Android project created."
-
-          else
-
-            echo ""
-            echo "Existing Android project is usable."
-
-          fi
+          echo "OK: android/gradlew"
 
 
       # ============================================================
-      # FIX ANDROID PACKAGE
+      # VERIFY PUBSPEC
       # ============================================================
 
-      - name: Configure Android package
+      - name: Verify pubspec configuration
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "CONFIGURING ANDROID PACKAGE"
+          echo "VERIFYING PUBSPEC"
           echo "========================================"
 
-          python3 <<'PY'
-          from pathlib import Path
-          import re
+          grep -q '^name: friend_post' pubspec.yaml
+          grep -q 'firebase_core:' pubspec.yaml
+          grep -q 'firebase_auth:' pubspec.yaml
+          grep -q 'cloud_firestore:' pubspec.yaml
+          grep -q 'firebase_storage:' pubspec.yaml
+          grep -q 'google_mobile_ads:' pubspec.yaml
 
-          APP_ID = "com.friendpost.app"
-          NAMESPACE = "com.friendpost.app"
+          echo "pubspec configuration verified."
 
-          candidates = [
-              Path("android/app/build.gradle.kts"),
-              Path("android/app/build.gradle"),
-          ]
 
-          app_gradle = None
+      # ============================================================
+      # VERIFY FIREBASE JSON
+      # ============================================================
 
-          for candidate in candidates:
-              if candidate.exists():
-                  app_gradle = candidate
-                  break
+      - name: Verify Firebase JSON
+        shell: bash
+        run: |
+          set -e
 
-          if app_gradle is None:
-              raise SystemExit(
-                  "ERROR: Android app Gradle file not found."
-              )
+          echo "========================================"
+          echo "VERIFYING FIREBASE JSON"
+          echo "========================================"
 
-          text = app_gradle.read_text()
+          FIREBASE="android/app/google-services.json"
 
-          # --------------------------------------------------------
-          # applicationId
-          # --------------------------------------------------------
+          test -f "$FIREBASE"
 
-          if re.search(r'applicationId\s*=\s*"[^"]+"', text):
-              text = re.sub(
-                  r'applicationId\s*=\s*"[^"]+"',
-                  f'applicationId = "{APP_ID}"',
-                  text,
-                  count=1,
-              )
+          grep -q '"project_id": "friend-post-fbfdd"' "$FIREBASE"
+          grep -q '"package_name": "com.friendpost.app"' "$FIREBASE"
+          grep -q '"mobilesdk_app_id": "1:1074705827775:android:68710467504787bc3a430a"' "$FIREBASE"
 
-          elif re.search(r'applicationId\s+"[^"]+"', text):
-              text = re.sub(
-                  r'applicationId\s+"[^"]+"',
-                  f'applicationId "{APP_ID}"',
-                  text,
-                  count=1,
-              )
+          echo "Firebase project ID: friend-post-fbfdd"
+          echo "Firebase package: com.friendpost.app"
+          echo "Firebase Android App ID verified."
 
-          else:
-              android_match = re.search(
-                  r'(?m)^\s*android\s*\{',
-                  text,
-              )
 
-              if not android_match:
-                  raise SystemExit(
-                      "ERROR: android block not found."
-                  )
+      # ============================================================
+      # VERIFY FIREBASE OPTIONS
+      # ============================================================
 
-              insert_at = android_match.end()
+      - name: Verify firebase_options.dart
+        shell: bash
+        run: |
+          set -e
 
-              text = (
-                  text[:insert_at]
-                  + f'\n    namespace = "{NAMESPACE}"'
-                  + f'\n    defaultConfig {{'
-                  + f'\n        applicationId = "{APP_ID}"'
-                  + f'\n    }}'
-                  + text[insert_at:]
-              )
+          echo "========================================"
+          echo "VERIFYING FIREBASE OPTIONS"
+          echo "========================================"
 
-          # --------------------------------------------------------
-          # namespace
-          # --------------------------------------------------------
+          FILE="lib/firebase_options.dart"
 
-          if re.search(r'namespace\s*=\s*"[^"]+"', text):
-              text = re.sub(
-                  r'namespace\s*=\s*"[^"]+"',
-                  f'namespace = "{NAMESPACE}"',
-                  text,
-                  count=1,
-              )
+          test -f "$FILE"
 
-          elif re.search(r'namespace\s+"[^"]+"', text):
-              text = re.sub(
-                  r'namespace\s+"[^"]+"',
-                  f'namespace "{NAMESPACE}"',
-                  text,
-                  count=1,
-              )
+          grep -q 'class DefaultFirebaseOptions' "$FILE"
+          grep -q 'FirebaseOptions' "$FILE"
+          grep -q 'friend-post-fbfdd' "$FILE"
+          grep -q '1074705827775' "$FILE"
+          grep -q '68710467504787bc3a430a' "$FILE"
+          grep -q 'AIzaSyAbYCTMxhCJzft1dgnpHDRkbC4v9RMU4GE' "$FILE"
 
-          else:
-              android_match = re.search(
-                  r'(?m)^\s*android\s*\{',
-                  text,
-              )
+          echo "firebase_options.dart verified."
 
-              if not android_match:
-                  raise SystemExit(
-                      "ERROR: android block not found."
-                  )
 
-              insert_at = android_match.end()
+      # ============================================================
+      # VERIFY MAIN DART
+      # ============================================================
 
-              text = (
-                  text[:insert_at]
-                  + f'\n    namespace = "{NAMESPACE}"'
-                  + text[insert_at:]
-              )
+      - name: Verify main.dart
+        shell: bash
+        run: |
+          set -e
 
-          app_gradle.write_text(text)
+          echo "========================================"
+          echo "VERIFYING MAIN.DART"
+          echo "========================================"
 
-          print("Android Gradle file:")
-          print(app_gradle)
-          print("")
-          print("Application ID:", APP_ID)
-          print("Namespace:", NAMESPACE)
-          PY
+          FILE="lib/main.dart"
+
+          test -f "$FILE"
+
+          grep -q 'firebase_core/firebase_core.dart' "$FILE"
+          grep -q 'firebase_options.dart' "$FILE"
+          grep -q 'Firebase.initializeApp' "$FILE"
+          grep -q 'DefaultFirebaseOptions.currentPlatform' "$FILE"
+
+          echo "main.dart verified."
 
 
       # ============================================================
@@ -345,44 +251,164 @@ jobs:
           echo "VERIFYING ANDROID PACKAGE"
           echo "========================================"
 
-          APP_GRADLE=""
-
-          if [ -f "android/app/build.gradle.kts" ]; then
-            APP_GRADLE="android/app/build.gradle.kts"
-          elif [ -f "android/app/build.gradle" ]; then
-            APP_GRADLE="android/app/build.gradle"
-          else
-            echo "ERROR: Android app Gradle file not found."
-            exit 1
-          fi
+          GRADLE_FILE="android/app/build.gradle.kts"
+          FIREBASE_FILE="android/app/google-services.json"
 
           echo ""
           echo "Using Gradle file:"
-          echo "$APP_GRADLE"
+          echo "$GRADLE_FILE"
 
           echo ""
           echo "Searching for package..."
 
-          grep -n \
-            "com.friendpost.app" \
-            "$APP_GRADLE" || true
+          grep -n 'namespace' "$GRADLE_FILE" || true
+          grep -n 'applicationId' "$GRADLE_FILE" || true
+
+          echo ""
+          echo "Verifying namespace..."
+
+          if ! grep -Fq 'namespace = "com.friendpost.app"' "$GRADLE_FILE"; then
+            echo "ERROR: namespace is not com.friendpost.app"
+            exit 1
+          fi
+
+          echo "OK: namespace = com.friendpost.app"
 
           echo ""
           echo "Verifying application ID..."
 
-          if ! grep -q \
-            "com.friendpost.app" \
-            "$APP_GRADLE"; then
-
-            echo ""
-            echo "ERROR: com.friendpost.app is not configured."
-            echo ""
-            cat "$APP_GRADLE"
+          if ! grep -Fq 'applicationId = "com.friendpost.app"' "$GRADLE_FILE"; then
+            echo "ERROR: applicationId is not com.friendpost.app"
             exit 1
           fi
+
+          echo "OK: applicationId = com.friendpost.app"
 
           echo ""
           echo "Verifying Firebase package..."
 
-          if ! grep -q \
-            '"package_name": "com.friendpost
+          if ! grep -Fq '"package_name": "com.friendpost.app"' "$FIREBASE_FILE"; then
+            echo "ERROR: Firebase package_name does not match."
+            exit 1
+          fi
+
+          echo "OK: Firebase package_name = com.friendpost.app"
+
+          echo ""
+          echo "Android package verification passed."
+
+
+      # ============================================================
+      # CHECK ANDROID V1 EMBEDDING
+      # ============================================================
+
+      - name: Check Android V1 embedding
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING ANDROID V1 EMBEDDING"
+          echo "========================================"
+
+          if grep -RInE \
+            --exclude-dir=.git \
+            --exclude-dir=build \
+            --exclude-dir=.gradle \
+            --exclude-dir=.dart_tool \
+            'io\.flutter\.app\.FlutterActivity|io\.flutter\.app\.FlutterApplication|PluginRegistry\.Registrar|FlutterActivityDelegate|FlutterView' \
+            android; then
+
+            echo ""
+            echo "ERROR: Legacy Android V1 embedding detected."
+            exit 1
+          fi
+
+          echo "SUCCESS: No Android V1 embedding found."
+
+
+      # ============================================================
+      # VERIFY GRADLE VERSION
+      # ============================================================
+
+      - name: Verify Gradle version
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING GRADLE"
+          echo "========================================"
+
+          if [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
+            echo "ERROR: Gradle wrapper properties missing."
+            exit 1
+          fi
+
+          grep -n 'distributionUrl' \
+            android/gradle/wrapper/gradle-wrapper.properties
+
+          echo ""
+          echo "Gradle wrapper verified."
+
+
+      # ============================================================
+      # GET DEPENDENCIES
+      # ============================================================
+
+      - name: Get Flutter dependencies
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "GETTING DEPENDENCIES"
+          echo "========================================"
+
+          flutter pub get
+
+          echo ""
+          echo "Dependencies installed successfully."
+
+
+      # ============================================================
+      # CLEAN
+      # ============================================================
+
+      - name: Clean Flutter project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CLEANING PROJECT"
+          echo "========================================"
+
+          flutter clean
+          flutter pub get
+
+          echo ""
+          echo "Clean completed."
+
+
+      # ============================================================
+      # ANALYZE
+      # ============================================================
+
+      - name: Run Flutter analyze
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "RUNNING FLUTTER ANALYZE"
+          echo "========================================"
+
+          flutter analyze
+
+          echo ""
+          echo "Flutter analyze completed successfully."
+
+
+      # ============================================================
+      #
