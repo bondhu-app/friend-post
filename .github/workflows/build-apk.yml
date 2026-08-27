@@ -18,7 +18,7 @@ jobs:
     steps:
 
       # ============================================================
-      # CHECKOUT
+      # 1. CHECKOUT
       # ============================================================
 
       - name: Checkout repository
@@ -26,7 +26,7 @@ jobs:
 
 
       # ============================================================
-      # JAVA 17
+      # 2. JAVA 17
       # ============================================================
 
       - name: Setup Java 17
@@ -38,7 +38,7 @@ jobs:
 
 
       # ============================================================
-      # FLUTTER
+      # 3. FLUTTER
       # ============================================================
 
       - name: Setup Flutter
@@ -50,143 +50,113 @@ jobs:
 
 
       # ============================================================
-      # FLUTTER VERSION
+      # 4. CHECK FLUTTER
       # ============================================================
 
       - name: Check Flutter
-        run: flutter --version
-
-
-      # ============================================================
-      # VERIFY BASIC FILES
-      # ============================================================
-
-      - name: Verify basic project files
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING BASIC PROJECT FILES"
+          echo "FLUTTER VERSION"
+          echo "========================================"
+
+          flutter --version
+
+
+      # ============================================================
+      # 5. CHECK BASIC PROJECT
+      # ============================================================
+
+      - name: Check Flutter project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING FLUTTER PROJECT"
+          echo "========================================"
+
+          test -f pubspec.yaml
+          test -f lib/main.dart
+          test -f lib/firebase_options.dart
+
+          echo "OK: pubspec.yaml"
+          echo "OK: lib/main.dart"
+          echo "OK: lib/firebase_options.dart"
+
+
+      # ============================================================
+      # 6. REPAIR ANDROID PROJECT
+      #
+      # If Android files are incomplete, Flutter regenerates them.
+      # Existing lib/ and pubspec.yaml are preserved.
+      # ============================================================
+
+      - name: Repair Android project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "REPAIRING ANDROID PROJECT"
+          echo "========================================"
+
+          NEED_REPAIR=0
+
+          if [ ! -f "android/app/build.gradle.kts" ]; then
+            NEED_REPAIR=1
+          fi
+
+          if [ ! -f "android/settings.gradle" ]; then
+            NEED_REPAIR=1
+          fi
+
+          if [ ! -f "android/app/src/main/AndroidManifest.xml" ]; then
+            NEED_REPAIR=1
+          fi
+
+          if [ ! -f "android/gradlew" ]; then
+            NEED_REPAIR=1
+          fi
+
+          if [ "$NEED_REPAIR" -eq 1 ]; then
+
+            echo ""
+            echo "Android project is incomplete."
+            echo "Regenerating Android platform files..."
+
+            flutter create \
+              --platforms=android \
+              --org com.friendpost \
+              --project-name friend_post \
+              --android-language kotlin \
+              .
+
+            echo ""
+            echo "Android project regenerated."
+
+          else
+
+            echo ""
+            echo "Android project already contains required files."
+
+          fi
+
+
+      # ============================================================
+      # 7. VERIFY ANDROID FILES
+      # ============================================================
+
+      - name: Verify Android project
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING ANDROID PROJECT"
           echo "========================================"
 
           required_files=(
-            "pubspec.yaml"
-            "lib/main.dart"
-            "lib/firebase_options.dart"
-            "android/app/google-services.json"
-            "android/app/build.gradle.kts"
-            "android/settings.gradle"
-            "android/app/src/main/AndroidManifest.xml"
-          )
-
-          for file in "${required_files[@]}"; do
-            if [ ! -f "$file" ]; then
-              echo "ERROR: Missing file: $file"
-              exit 1
-            fi
-
-            echo "OK: $file"
-          done
-
-          echo ""
-          echo "Basic project files verified."
-
-
-      # ============================================================
-      # REPAIR ANDROID GRADLE WRAPPER
-      # ============================================================
-
-      - name: Repair Android Gradle wrapper
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "REPAIRING ANDROID GRADLE WRAPPER"
-          echo "========================================"
-
-          cd android
-
-          if [ ! -f "gradle/wrapper/gradle-wrapper.properties" ]; then
-            echo "ERROR: gradle-wrapper.properties is missing."
-            exit 1
-          fi
-
-          echo ""
-          echo "Current wrapper configuration:"
-          cat gradle/wrapper/gradle-wrapper.properties
-
-          echo ""
-
-          if [ -f "./gradlew" ]; then
-            echo "gradlew already exists."
-          else
-            echo "gradlew is missing."
-            echo "Generating Gradle wrapper..."
-
-            GRADLE_VERSION=$(grep \
-              -oE 'gradle-[0-9]+\.[0-9]+(\.[0-9]+)?-bin\.zip' \
-              gradle/wrapper/gradle-wrapper.properties \
-              | head -n 1 \
-              | sed -E 's/gradle-([0-9.]+)-bin.zip/\1/')
-
-            if [ -z "$GRADLE_VERSION" ]; then
-              echo "Could not determine Gradle version."
-              exit 1
-            fi
-
-            echo "Detected Gradle version: $GRADLE_VERSION"
-
-            curl -fL \
-              "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
-              -o /tmp/gradle.zip
-
-            mkdir -p /tmp/gradle-dist
-
-            unzip -q \
-              /tmp/gradle.zip \
-              -d /tmp/gradle-dist
-
-            GRADLE_HOME="/tmp/gradle-dist/gradle-${GRADLE_VERSION}"
-
-            if [ ! -x "$GRADLE_HOME/bin/gradle" ]; then
-              echo "ERROR: Gradle executable was not found."
-              exit 1
-            fi
-
-            "$GRADLE_HOME/bin/gradle" wrapper \
-              --gradle-version "$GRADLE_VERSION"
-
-            echo "Gradle wrapper generated."
-          fi
-
-          if [ ! -f "./gradlew" ]; then
-            echo "ERROR: android/gradlew could not be created."
-            exit 1
-          fi
-
-          chmod +x ./gradlew
-
-          echo ""
-          echo "SUCCESS: android/gradlew is ready."
-
-          ls -lh ./gradlew
-
-
-      # ============================================================
-      # VERIFY GRADLE WRAPPER
-      # ============================================================
-
-      - name: Verify Gradle wrapper
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING GRADLE WRAPPER"
-          echo "========================================"
-
-          test -f android/gradlew
-          test -f android/gradle/wrapper/gradle-wrapper.jar
-          test -f android/gradle
+            "android/app/buildbuild
