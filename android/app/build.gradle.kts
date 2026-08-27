@@ -7,16 +7,13 @@ plugins {
 
 android {
     namespace = "com.friendpost.app"
-
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     defaultConfig {
         applicationId = "com.friendpost.app"
-
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
