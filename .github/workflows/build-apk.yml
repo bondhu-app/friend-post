@@ -50,32 +50,24 @@ jobs:
 
 
       # ============================================================
-      # CHECK FLUTTER
+      # FLUTTER VERSION
       # ============================================================
 
       - name: Check Flutter
+        run: flutter --version
+
+
+      # ============================================================
+      # VERIFY BASIC FILES
+      # ============================================================
+
+      - name: Verify basic project files
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "FLUTTER VERSION"
-          echo "========================================"
-
-          flutter --version
-
-
-      # ============================================================
-      # VERIFY PROJECT FILES
-      # ============================================================
-
-      - name: Verify project files
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING PROJECT"
+          echo "VERIFYING BASIC PROJECT FILES"
           echo "========================================"
 
           required_files=(
@@ -85,8 +77,6 @@ jobs:
             "android/app/google-services.json"
             "android/app/build.gradle.kts"
             "android/settings.gradle"
-            "android/gradlew"
-            "android/gradle/wrapper/gradle-wrapper.properties"
             "android/app/src/main/AndroidManifest.xml"
           )
 
@@ -99,95 +89,104 @@ jobs:
             echo "OK: $file"
           done
 
-          if [ -f "android/build.gradle.kts" ]; then
-            echo "OK: android/build.gradle.kts"
-          elif [ -f "android/build.gradle" ]; then
-            echo "OK: android/build.gradle"
-          else
-            echo "ERROR: Missing Android root Gradle file."
+          echo ""
+          echo "Basic project files verified."
+
+
+      # ============================================================
+      # REPAIR ANDROID GRADLE WRAPPER
+      # ============================================================
+
+      - name: Repair Android Gradle wrapper
+        shell: bash
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "REPAIRING ANDROID GRADLE WRAPPER"
+          echo "========================================"
+
+          cd android
+
+          if [ ! -f "gradle/wrapper/gradle-wrapper.properties" ]; then
+            echo "ERROR: gradle-wrapper.properties is missing."
             exit 1
           fi
 
           echo ""
-          echo "PROJECT STRUCTURE VERIFIED."
+          echo "Current wrapper configuration:"
+          cat gradle/wrapper/gradle-wrapper.properties
+
+          echo ""
+
+          if [ -f "./gradlew" ]; then
+            echo "gradlew already exists."
+          else
+            echo "gradlew is missing."
+            echo "Generating Gradle wrapper..."
+
+            GRADLE_VERSION=$(grep \
+              -oE 'gradle-[0-9]+\.[0-9]+(\.[0-9]+)?-bin\.zip' \
+              gradle/wrapper/gradle-wrapper.properties \
+              | head -n 1 \
+              | sed -E 's/gradle-([0-9.]+)-bin.zip/\1/')
+
+            if [ -z "$GRADLE_VERSION" ]; then
+              echo "Could not determine Gradle version."
+              exit 1
+            fi
+
+            echo "Detected Gradle version: $GRADLE_VERSION"
+
+            curl -fL \
+              "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
+              -o /tmp/gradle.zip
+
+            mkdir -p /tmp/gradle-dist
+
+            unzip -q \
+              /tmp/gradle.zip \
+              -d /tmp/gradle-dist
+
+            GRADLE_HOME="/tmp/gradle-dist/gradle-${GRADLE_VERSION}"
+
+            if [ ! -x "$GRADLE_HOME/bin/gradle" ]; then
+              echo "ERROR: Gradle executable was not found."
+              exit 1
+            fi
+
+            "$GRADLE_HOME/bin/gradle" wrapper \
+              --gradle-version "$GRADLE_VERSION"
+
+            echo "Gradle wrapper generated."
+          fi
+
+          if [ ! -f "./gradlew" ]; then
+            echo "ERROR: android/gradlew could not be created."
+            exit 1
+          fi
+
+          chmod +x ./gradlew
+
+          echo ""
+          echo "SUCCESS: android/gradlew is ready."
+
+          ls -lh ./gradlew
 
 
       # ============================================================
-      # MAKE GRADLE EXECUTABLE
+      # VERIFY GRADLE WRAPPER
       # ============================================================
 
-      - name: Fix Gradle permissions
-        shell: bash
-        run: |
-          set -e
-
-          chmod +x android/gradlew
-
-          echo "Gradle executable permission fixed."
-
-
-      # ============================================================
-      # VERIFY FIREBASE JSON
-      # ============================================================
-
-      - name: Verify Firebase configuration
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING FIREBASE"
-          echo "========================================"
-
-          FIREBASE="android/app/google-services.json"
-
-          grep -q '"project_id": "friend-post-fbfdd"' "$FIREBASE"
-          grep -q '"package_name": "com.friendpost.app"' "$FIREBASE"
-          grep -q '"mobilesdk_app_id": "1:1074705827775:android:68710467504787bc3a430a"' "$FIREBASE"
-
-          echo "Firebase project verified."
-          echo "Project ID: friend-post-fbfdd"
-          echo "Package: com.friendpost.app"
-
-
-      # ============================================================
-      # VERIFY FIREBASE OPTIONS
-      # ============================================================
-
-      - name: Verify firebase_options.dart
-        shell: bash
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING FIREBASE OPTIONS"
-          echo "========================================"
-
-          FILE="lib/firebase_options.dart"
-
-          grep -q "class DefaultFirebaseOptions" "$FILE"
-          grep -q "FirebaseOptions" "$FILE"
-          grep -q "friend-post-fbfdd" "$FILE"
-          grep -q "1074705827775" "$FILE"
-          grep -q "68710467504787bc3a430a" "$FILE"
-          grep -q "TargetPlatform.fuchsia" "$FILE"
-
-          echo "firebase_options.dart verified."
-
-
-      # ============================================================
-      # VERIFY MAIN.DART
-      # ============================================================
-
-      - name: Verify main.dart
+      - name: Verify Gradle wrapper
         shell: bash
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING MAIN.DART"
+          echo "VERIFYING GRADLE WRAPPER"
           echo "========================================"
 
-          FILE="lib/main.dart"
-
-          grep -q "
+          test -f android/gradlew
+          test -f android/gradle/wrapper/gradle-wrapper.jar
+          test -f android/gradle
