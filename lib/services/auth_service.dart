@@ -20,7 +20,7 @@ class AuthService {
     );
   }
 
-  // লগইন
+  // ইমেইল ও পাসওয়ার্ড দিয়ে লগইন
   Future<UserCredential> signIn({
     required String email,
     required String password,
@@ -36,8 +36,17 @@ class AuthService {
     await _auth.signOut();
   }
 
-  // পাসওয়ার্ড রিসেট ইমেইল
+  // পাসওয়ার্ড রিসেট
   Future<void> resetPassword({
+    required String email,
+  }) async {
+    await _auth.sendPasswordResetEmail(
+      email: email,
+    );
+  }
+
+  // Forgot Password Screen-এর জন্য একই Password Reset Method
+  Future<void> sendPasswordResetEmail({
     required String email,
   }) async {
     await _auth.sendPasswordResetEmail(
