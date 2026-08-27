@@ -3,39 +3,45 @@ import 'package:firebase_auth/firebase_auth.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // বর্তমানে লগইন করা ইউজার
   User? get currentUser => _auth.currentUser;
 
+  // Authentication state পরিবর্তন হলে Stream
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  // নতুন অ্যাকাউন্ট তৈরি
   Future<UserCredential> signUp({
     required String email,
     required String password,
   }) async {
     return await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
+      email: email,
       password: password,
     );
   }
 
-  Future<UserCredential> login({
+  // লগইন
+  Future<UserCredential> signIn({
     required String email,
     required String password,
   }) async {
     return await _auth.signInWithEmailAndPassword(
-      email: email.trim(),
+      email: email,
       password: password,
     );
   }
 
-  Future<void> sendPasswordResetEmail({
+  // লগআউট
+  Future<void> signOut() async {
+    await _auth.signOut();
+  }
+
+  // পাসওয়ার্ড রিসেট ইমেইল
+  Future<void> resetPassword({
     required String email,
   }) async {
     await _auth.sendPasswordResetEmail(
-      email: email.trim(),
+      email: email,
     );
-  }
-
-  Future<void> logout() async {
-    await _auth.signOut();
   }
 }
