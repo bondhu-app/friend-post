@@ -1,25 +1,24 @@
-name: Build Friend Post APK
+name: Friend Post APK
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
       - master
-  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   build:
-    name: Build Friend Post APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -31,39 +30,39 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Verify source project
+      - name: Show repository
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING FRIEND POST SOURCE"
+          echo "FRIEND POST REPOSITORY"
+          echo "========================================"
+
+          pwd
+          echo ""
+
+          echo "Root files:"
+          ls -la
+
+          echo ""
+          echo "Workflow:"
+          ls -la .github/workflows || true
+
+      - name: Verify source
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING SOURCE"
           echo "========================================"
 
           test -f pubspec.yaml
           test -f lib/main.dart
-          test -f lib/firebase_options.dart
 
-          echo "pubspec.yaml: OK"
-          echo "lib/main.dart: OK"
-          echo "lib/firebase_options.dart: OK"
+          echo "pubspec.yaml FOUND"
+          echo "lib/main.dart FOUND"
 
-      - name: Backup application source
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "BACKING UP APPLICATION SOURCE"
-          echo "========================================"
-
-          rm -rf /tmp/friend_post_source
-          mkdir -p /tmp/friend_post_source
-
-          cp -r lib /tmp/friend_post_source/lib
-          cp pubspec.yaml /tmp/friend_post_source/pubspec.yaml
-
-          echo "Application source backed up."
-
-      - name: Generate Flutter Android project
+      - name: Generate Android project
         run: |
           set -e
 
@@ -79,30 +78,8 @@ jobs:
             --org com.friendpost \
             .
 
+          echo ""
           echo "Android project generated."
-
-      - name: Restore application source
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "RESTORING APPLICATION SOURCE"
-          echo "========================================"
-
-          rm -rf lib
-          cp -r /tmp/friend_post_source/lib lib
-
-          cp /tmp/friend_post_source/pubspec.yaml pubspec.yaml
-
-          echo "Application source restored."
-
-      - name: Verify Android project
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CHECKING ANDROID PROJECT"
-          echo "========================================"
 
           test -d android
           test -f android/settings.gradle
@@ -112,52 +89,34 @@ jobs:
 
           chmod +x android/gradlew
 
-          echo "android/: OK"
-          echo "settings.gradle: OK"
-          echo "app/build.gradle: OK"
-          echo "gradlew: OK"
-          echo "Gradle wrapper: OK"
+          echo ""
+          echo "ANDROID PROJECT READY"
 
-      - name: Set Android application ID
+      - name: Configure application ID
         run: |
           set -e
 
           echo "========================================"
-          echo "SETTING APPLICATION ID"
+          echo "CONFIGURING APPLICATION ID"
           echo "========================================"
 
           python3 <<'PY'
           from pathlib import Path
 
-          path = Path("android/app/build.gradle")
-          text = path.read_text()
+          p = Path("android/app/build.gradle")
+          text = p.read_text()
 
           text = text.replace(
-              "namespace = \"com.example.friend_post\"",
-              "namespace = \"com.friendpost.app\""
+              "com.example.friend_post",
+              "com.friendpost.app"
           )
 
-          text = text.replace(
-              'applicationId = "com.example.friend_post"',
-              'applicationId = "com.friendpost.app"'
-          )
-
-          text = text.replace(
-              "namespace = 'com.example.friend_post'",
-              "namespace = 'com.friendpost.app'"
-          )
-
-          text = text.replace(
-              "applicationId 'com.example.friend_post'",
-              "applicationId 'com.friendpost.app'"
-          )
-
-          path.write_text(text)
+          p.write_text(text)
 
           print("Application ID configured.")
           PY
 
-      - name: Configure Firebase Google Services
+      - name: Configure Firebase
         run: |
           set -e
 
@@ -201,12 +160,12 @@ jobs:
 
           echo "google-services.json created."
 
-      - name: Configure Google Services Gradle plugin
+      - name: Configure Google Services plugin
         run: |
           set -e
 
           echo "========================================"
-          echo "CONFIGURING GOOGLE SERVICES PLUGIN"
+          echo "CONFIGURING GOOGLE SERVICES"
           echo "========================================"
 
           python3 <<'PY'
@@ -215,41 +174,35 @@ jobs:
           settings = Path("android/settings.gradle")
           app = Path("android/app/build.gradle")
 
-          settings_text = settings.read_text()
-          app_text = app.read_text()
+          s = settings.read_text()
+          a = app.read_text()
 
-          if "com.google.gms.google-services" not in settings_text:
-              marker = "plugins {"
+          if "com.google.gms.google-services" not in s:
+              s = s.replace(
+                  "plugins {",
+                  "plugins {\n    id 'com.google.gms.google-services' version '4.4.4' apply false",
+                  1
+              )
 
-              if marker in settings_text:
-                  settings_text = settings_text.replace(
-                      marker,
-                      marker + "\n    id 'com.google.gms.google-services' version '4.4.4' apply false",
-                      1
-                  )
+          if "com.google.gms.google-services" not in a:
+              a = a.replace(
+                  "plugins {",
+                  "plugins {\n    id 'com.google.gms.google-services'",
+                  1
+              )
 
-          if "com.google.gms.google-services" not in app_text:
-              marker = "plugins {"
+          settings.write_text(s)
+          app.write_text(a)
 
-              if marker in app_text:
-                  app_text = app_text.replace(
-                      marker,
-                      marker + "\n    id 'com.google.gms.google-services'",
-                      1
-                  )
-
-          settings.write_text(settings_text)
-          app.write_text(app_text)
-
-          print("Google Services plugin configured.")
+          print("Google Services configured.")
           PY
 
-      - name: Add Firebase dependencies
+      - name: Add Firebase packages
         run: |
           set -e
 
           echo "========================================"
-          echo "ADDING FIREBASE DEPENDENCIES"
+          echo "ADDING FIREBASE PACKAGES"
           echo "========================================"
 
           flutter pub add firebase_core
@@ -258,19 +211,17 @@ jobs:
 
           flutter pub get
 
-      - name: Verify dependencies
+      - name: Verify Firebase options
         run: |
           set -e
 
           echo "========================================"
-          echo "VERIFYING DEPENDENCIES"
+          echo "VERIFYING FIREBASE OPTIONS"
           echo "========================================"
 
-          grep -q "firebase_core" pubspec.yaml
-          grep -q "firebase_auth" pubspec.yaml
-          grep -q "cloud_firestore" pubspec.yaml
+          test -f lib/firebase_options.dart
 
-          echo "Firebase dependencies: OK"
+          echo "firebase_options.dart FOUND"
 
       - name: Flutter analyze
         run: |
@@ -282,7 +233,7 @@ jobs:
 
           flutter analyze
 
-      - name: Build release APK
+      - name: Build APK
         run: |
           set -e
 
@@ -300,18 +251,14 @@ jobs:
           echo "VERIFYING APK"
           echo "========================================"
 
-          APK="build/app/outputs/flutter-apk/app-release.apk"
+          test -f build/app/outputs/flutter-apk/app-release.apk
 
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not created."
-            exit 1
-          fi
+          ls -lh build/app/outputs/flutter-apk/app-release.apk
 
           echo ""
-          echo "APK BUILD SUCCESSFUL"
-          echo ""
-
-          ls -lh "$APK"
+          echo "========================================"
+          echo "SUCCESS"
+          echo "========================================"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
