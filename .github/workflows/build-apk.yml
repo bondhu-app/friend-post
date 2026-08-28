@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -88,27 +88,5 @@ jobs:
           path = Path("android/app/build.gradle.kts")
           text = path.read_text()
 
-          text = text.replace(
-              'namespace = "com.friendpost.friend_post"',
-              'namespace = "com.friendpost.app"'
-          )
-
-          text = text.replace(
-              'namespace = "com.example.friend_post"',
-              'namespace = "com.friendpost.app"'
-          )
-
-          text = text.replace(
-              'applicationId = "com.friendpost.friend_post"',
-              'applicationId = "com.friendpost.app"'
-          )
-
-          text = text.replace(
-              'applicationId = "com.example.friend_post"',
-              'applicationId = "com.friendpost.app"'
-          )
-
-          path.write_text(text)
-
-          print("Android application configured.")
-          PY
+          replacements = {
+              'com.example.friend_postpost
