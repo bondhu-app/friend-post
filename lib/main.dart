@@ -9,15 +9,35 @@ import 'screens/auth/signup_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
 
-  runApp(const FriendPostApp());
+    runApp(
+      const FriendPostApp(
+        firebaseReady: true,
+      ),
+    );
+  } catch (e) {
+    runApp(
+      FriendPostApp(
+        firebaseReady: false,
+        firebaseError: e.toString(),
+      ),
+    );
+  }
 }
 
 class FriendPostApp extends StatelessWidget {
-  const FriendPostApp({super.key});
+  final bool firebaseReady;
+  final String? firebaseError;
+
+  const FriendPostApp({
+    super.key,
+    required this.firebaseReady,
+    this.firebaseError,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +50,11 @@ class FriendPostApp extends StatelessWidget {
         brightness: Brightness.light,
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: const AuthGate(),
+      home: firebaseReady
+          ? const AuthGate()
+          : FirebaseErrorScreen(
+              error: firebaseError ?? 'অজানা Firebase সমস্যা',
+            ),
     );
   }
 }
@@ -45,6 +69,12 @@ class AuthGate extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SplashScreen();
+        }
+
+        if (snapshot.hasError) {
+          return FirebaseErrorScreen(
+            error: snapshot.error.toString(),
+          );
         }
 
         if (snapshot.hasData) {
@@ -82,6 +112,81 @@ class SplashScreen extends StatelessWidget {
             SizedBox(height: 20),
             CircularProgressIndicator(),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class FirebaseErrorScreen extends StatelessWidget {
+  final String error;
+
+  const FirebaseErrorScreen({
+    super.key,
+    required this.error,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Friend Post'),
+        centerTitle: true,
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 80,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Firebase চালু করা যায়নি',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'অ্যাপটি Firebase-এর সাথে সংযোগ করতে পারেনি। নিচের error দেখুন:',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: SelectableText(
+                    error,
+                    style: const TextStyle(
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'এই স্ক্রিনের একটি screenshot আমাকে পাঠাও।',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
