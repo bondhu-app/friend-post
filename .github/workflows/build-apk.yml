@@ -34,85 +34,89 @@ jobs:
       - name: Show Flutter version
         run: flutter --version
 
-      - name: Create missing Flutter project files
+      - name: Create or repair Flutter project
         run: |
           set -e
 
           echo "========================================"
-          echo "CREATING FRIEND POST FLUTTER PROJECT"
+          echo "PREPARING FRIEND POST FLUTTER PROJECT"
           echo "========================================"
 
           if [ ! -f "pubspec.yaml" ]; then
-            echo "pubspec.yaml is missing."
-            echo "Creating Flutter project files..."
+            echo "pubspec.yaml missing."
+            echo "Creating Flutter project..."
 
             flutter create \
               --project-name friend_post \
               --org com.friendpost \
               .
-
           else
-            echo "pubspec.yaml already exists."
+            echo "pubspec.yaml found."
           fi
 
-      - name: Check project
+      - name: Verify pubspec
         run: |
           set -e
 
           echo "========================================"
-          echo "CHECKING FLUTTER PROJECT"
+          echo "VERIFYING PUBSPEC"
           echo "========================================"
 
           test -f pubspec.yaml
-          test -d lib
-          test -d android
-          test -f lib/main.dart
 
-          echo "pubspec.yaml: OK"
-          echo "lib/: OK"
-          echo "android/: OK"
-          echo "lib/main.dart: OK"
+          echo "pubspec.yaml found."
 
-      - name: Add Firebase packages
+      - name: Add required Firebase packages
         run: |
           set -e
 
           echo "========================================"
-          echo "ADDING FIREBASE PACKAGES"
+          echo "ADDING FIREBASE DEPENDENCIES"
           echo "========================================"
 
           flutter pub add firebase_core
           flutter pub add firebase_auth
+          flutter pub add cloud_firestore
 
-      - name: Check Firebase configuration
-        run: |
-          echo "========================================"
-          echo "CHECKING FIREBASE CONFIGURATION"
-          echo "========================================"
-
-          if [ -f "lib/firebase_options.dart" ]; then
-            echo "firebase_options.dart: FOUND"
-          else
-            echo ""
-            echo "WARNING: lib/firebase_options.dart was not found."
-            echo ""
-            echo "Firebase initialization requires this file."
-            echo "The build will stop before APK compilation."
-            echo ""
-            exit 1
-          fi
-
-      - name: Install dependencies
+      - name: Repair Android project
         run: |
           set -e
 
           echo "========================================"
-          echo "FLUTTER PUB GET"
+          echo "REPAIRING ANDROID PROJECT"
           echo "========================================"
 
-          flutter pub get
+          if [ ! -f "android/gradlew" ] || \
+             [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
 
-      - name: Check Android project
+            echo "Android Gradle files are missing."
+            echo "Regenerating Flutter Android project files..."
+
+            mkdir -p /tmp/friend_post_backup
+
+            cp -r lib /tmp/friend_post_backup/lib
+
+            if [ -f "pubspec.yaml" ]; then
+              cp pubspec.yaml /tmp/friend_post_backup/pubspec.yaml
+            fi
+
+            flutter create \
+              --platforms=android \
+              --project-name friend_post \
+              --org com.friendpost \
+              .
+
+            cp -r /tmp/friend_post_backup/lib/* lib/
+
+            if [ -f "/tmp/friend_post_backup/pubspec.yaml" ]; then
+              cp /tmp/friend_post_backup/pubspec.yaml pubspec.yaml
+            fi
+
+          else
+            echo "Android Gradle files already exist."
+          fi
+
+      - name: Verify Android project
         run: |
           set -e
 
@@ -120,13 +124,60 @@ jobs:
           echo "CHECKING ANDROID PROJECT"
           echo "========================================"
 
-          test -f android/gradlew
-          test -f android/gradle/wrapper/gradle-wrapper.properties
+          if [ ! -f "android/gradlew" ]; then
+            echo "ERROR: android/gradlew is missing."
+            exit 1
+          fi
+
+          if [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
+            echo "ERROR: Gradle wrapper properties are missing."
+            exit 1
+          fi
+
+          echo "android/gradlew: OK"
+          echo "gradle-wrapper.properties: OK"
 
           chmod +x android/gradlew
 
-          echo "Android project: OK"
-          echo "Gradle wrapper: OK"
+      - name: Check Firebase configuration
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING FIREBASE CONFIGURATION"
+          echo "========================================"
+
+          if [ ! -f "lib/firebase_options.dart" ]; then
+            echo "ERROR: lib/firebase_options.dart is missing."
+            exit 1
+          fi
+
+          echo "firebase_options.dart: OK"
+
+      - name: Check Google Services
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CHECKING GOOGLE SERVICES"
+          echo "========================================"
+
+          if [ -f "android/app/google-services.json" ]; then
+            echo "google-services.json: FOUND"
+          else
+            echo "WARNING: android/app/google-services.json not found."
+            echo "Firebase Android initialization may require this file."
+          fi
+
+      - name: Flutter pub get
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "RUNNING FLUTTER PUB GET"
+          echo "========================================"
+
+          flutter pub get
 
       - name: Flutter analyze
         run: |
@@ -162,9 +213,8 @@ jobs:
           fi
 
           echo ""
-          echo "========================================"
           echo "APK BUILD SUCCESSFUL"
-          echo "========================================"
+          echo ""
 
           ls -lh "$APK"
 
