@@ -19,7 +19,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -31,9 +31,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Show Flutter version
-        run: flutter --version
-
       - name: Verify Flutter project
         run: |
           set -e
@@ -42,24 +39,71 @@ jobs:
           echo "VERIFYING FRIEND POST PROJECT"
           echo "========================================"
 
-          if [ ! -f "pubspec.yaml" ]; then
-            echo "ERROR: pubspec.yaml is missing."
-            exit 1
+          test -f pubspec.yaml
+          test -d lib
+          test -f lib/main.dart
+
+          echo "Flutter project: OK"
+
+      - name: Prepare Android project
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "PREPARING ANDROID PROJECT"
+          echo "========================================"
+
+          if [ ! -d "android" ] || \
+             [ ! -f "android/settings.gradle" ] || \
+             [ ! -f "android/app/build.gradle" ]; then
+
+            echo "Android project is missing."
+            echo "Generating Android project..."
+
+            TEMP_DIR=$(mktemp -d)
+
+            cd "$TEMP_DIR"
+
+            flutter create \
+              --platforms=android \
+              --project-name friend_post \
+              --org com.friendpost \
+              friend_post_project
+
+            cd "$GITHUB_WORKSPACE"
+
+            rm -rf android
+            cp -r "$TEMP_DIR/friend_post_project/android" android
+
+            rm -rf "$TEMP_DIR"
+
+            echo "Android project generated successfully."
+
+          else
+            echo "Android project already exists."
           fi
 
-          if [ ! -d "lib" ]; then
-            echo "ERROR: lib directory is missing."
-            exit 1
-          fi
+      - name: Verify Android project
+        run: |
+          set -e
 
-          if [ ! -f "lib/main.dart" ]; then
-            echo "ERROR: lib/main.dart is missing."
-            exit 1
-          fi
+          echo "========================================"
+          echo "CHECKING ANDROID PROJECT"
+          echo "========================================"
 
-          echo "pubspec.yaml: OK"
-          echo "lib/: OK"
-          echo "lib/main.dart: OK"
+          test -d android
+          test -f android/settings.gradle
+          test -f android/app/build.gradle
+          test -f android/gradlew
+          test -f android/gradle/wrapper/gradle-wrapper.properties
+
+          chmod +x android/gradlew
+
+          echo "android/: OK"
+          echo "settings.gradle: OK"
+          echo "app/build.gradle: OK"
+          echo "gradlew: OK"
+          echo "Gradle wrapper: OK"
 
       - name: Add Firebase dependencies
         run: |
@@ -73,125 +117,9 @@ jobs:
           flutter pub add firebase_auth
           flutter pub add cloud_firestore
 
-      - name: Generate missing Android project
-        run: |
-          set -e
+          flutter pub get
 
-          echo "========================================"
-          echo "CHECKING ANDROID PROJECT"
-          echo "========================================"
-
-          if [ ! -f "android/gradlew" ] || \
-             [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
-
-            echo "Android project files are missing."
-            echo "Generating Android files..."
-
-            mkdir -p /tmp/friend_post_backup
-
-            cp -r lib /tmp/friend_post_backup/lib
-
-            flutter create \
-              --platforms=android \
-              --project-name friend_post \
-              --org com.friendpost \
-              .
-
-            rm -rf lib
-            cp -r /tmp/friend_post_backup/lib lib
-
-          else
-            echo "Android project already exists."
-          fi
-
-      - name: Verify Android project
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING ANDROID PROJECT"
-          echo "========================================"
-
-          if [ ! -f "android/gradlew" ]; then
-            echo "ERROR: android/gradlew is missing."
-            exit 1
-          fi
-
-          if [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
-            echo "ERROR: gradle-wrapper.properties is missing."
-            exit 1
-          fi
-
-          echo "android/gradlew: OK"
-          echo "gradle-wrapper.properties: OK"
-
-          chmod +x android/gradlew
-
-      - name: Check Firebase options
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CHECKING FIREBASE OPTIONS"
-          echo "========================================"
-
-          if [ ! -f "lib/firebase_options.dart" ]; then
-            echo "ERROR: lib/firebase_options.dart is missing."
-            exit 1
-          fi
-
-          echo "firebase_options.dart: OK"
-
-      - name: Create Google Services configuration
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CHECKING GOOGLE SERVICES"
-          echo "========================================"
-
-          if [ -f "android/app/google-services.json" ]; then
-            echo "google-services.json already exists."
-          else
-            echo "google-services.json is missing."
-            echo "Creating configuration from Firebase project..."
-
-            cat > android/app/google-services.json <<'EOF'
-          {
-            "project_info": {
-              "project_number": "1074705827775",
-              "project_id": "friend-post-fbfdd",
-              "storage_bucket": "friend-post-fbfdd.firebasestorage.app"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:1074705827775:android:68710467504787bc3a430a",
-                  "android_client_info": {
-                    "package_name": "com.friendpost.app"
-                  }
-                },
-                "oauth_client": [],
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyAbYCTMxhCJzft1dgnpHDRkbC4v9RMU4GE"
-                  }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": []
-                  }
-                },
-                "configuration_version": "1"
-              }
-            ]
-          }
-          EOF
-
-            echo "google-services.json created."
-          fi
-
-      - name: Configure Android Firebase plugin
+      - name: Configure Firebase Android plugin
         run: |
           set -e
 
@@ -199,89 +127,81 @@ jobs:
           echo "CONFIGURING FIREBASE ANDROID PLUGIN"
           echo "========================================"
 
-          python3 - <<'PY'
+          python3 <<'PY'
           from pathlib import Path
 
           settings = Path("android/settings.gradle")
-          content = settings.read_text()
-
-          if "com.google.gms.google-services" not in content:
-              content = content.replace(
-                  "plugins {",
-                  "plugins {\n    id 'com.google.gms.google-services' version '4.4.4' apply false",
-                  1
-              )
-              settings.write_text(content)
-
           app_gradle = Path("android/app/build.gradle")
-          content = app_gradle.read_text()
 
-          if "com.google.gms.google-services" not in content:
-              content = content.replace(
-                  "plugins {",
-                  "plugins {\n    id 'com.google.gms.google-services'",
-                  1
-              )
-              app_gradle.write_text(content)
+          settings_content = settings.read_text()
+          app_content = app_gradle.read_text()
 
-          print("Firebase Android plugin configured.")
+          # Add Google Services plugin to settings.gradle
+          if "com.google.gms.google-services" not in settings_content:
+              if "plugins {" in settings_content:
+                  settings_content = settings_content.replace(
+                      "plugins {",
+                      "plugins {\n    id 'com.google.gms.google-services' version '4.4.4' apply false",
+                      1
+                  )
+              else:
+                  settings_content = (
+                      "pluginManagement {\n"
+                      "    repositories {\n"
+                      "        google()\n"
+                      "        mavenCentral()\n"
+                      "        gradlePluginPortal()\n"
+                      "    }\n"
+                      "}\n\n"
+                      "plugins {\n"
+                      "    id 'com.android.application' version '8.9.1' apply false\n"
+                      "    id 'org.jetbrains.kotlin.android' version '2.1.0' apply false\n"
+                      "    id 'dev.flutter.flutter-plugin-loader' version '1.0.0'\n"
+                      "    id 'com.google.gms.google-services' version '4.4.4' apply false\n"
+                      "}\n\n"
+                      + settings_content
+                  )
+
+              settings.write_text(settings_content)
+
+          # Add Google Services plugin to app build.gradle
+          if "com.google.gms.google-services" not in app_content:
+              if "plugins {" in app_content:
+                  app_content = app_content.replace(
+                      "plugins {",
+                      "plugins {\n    id 'com.google.gms.google-services'",
+                      1
+                  )
+              else:
+                  app_content = (
+                      "plugins {\n"
+                      "    id 'com.android.application'\n"
+                      "    id 'org.jetbrains.kotlin.android'\n"
+                      "    id 'dev.flutter.flutter-gradle-plugin'\n"
+                      "    id 'com.google.gms.google-services'\n"
+                      "}\n\n"
+                      + app_content
+                  )
+
+              app_gradle.write_text(app_content)
+
+          print("Firebase Gradle plugin configured.")
           PY
 
-      - name: Flutter pub get
+      - name: Create Google Services configuration
         run: |
           set -e
 
           echo "========================================"
-          echo "RUNNING FLUTTER PUB GET"
+          echo "CONFIGURING GOOGLE SERVICES"
           echo "========================================"
 
-          flutter pub get
+          mkdir -p android/app
 
-      - name: Flutter analyze
-        run: |
-          set -e
+          if [ ! -f "android/app/google-services.json" ]; then
 
-          echo "========================================"
-          echo "RUNNING FLUTTER ANALYZE"
-          echo "========================================"
-
-          flutter analyze
-
-      - name: Build release APK
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "BUILDING FRIEND POST APK"
-          echo "========================================"
-
-          flutter build apk --release
-
-      - name: Verify APK
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING APK"
-          echo "========================================"
-
-          APK="build/app/outputs/flutter-apk/app-release.apk"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not created."
-            exit 1
-          fi
-
-          echo ""
-          echo "========================================"
-          echo "APK BUILD SUCCESSFUL"
-          echo "========================================"
-
-          ls -lh "$APK"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: friend-post-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
+            cat > android/app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "1074705827775",
+              "project_id": "friend-post-f
