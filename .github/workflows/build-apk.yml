@@ -34,39 +34,34 @@ jobs:
       - name: Show Flutter version
         run: flutter --version
 
-      - name: Create or repair Flutter project
+      - name: Verify Flutter project
         run: |
           set -e
 
           echo "========================================"
-          echo "PREPARING FRIEND POST FLUTTER PROJECT"
+          echo "VERIFYING FRIEND POST PROJECT"
           echo "========================================"
 
           if [ ! -f "pubspec.yaml" ]; then
-            echo "pubspec.yaml missing."
-            echo "Creating Flutter project..."
-
-            flutter create \
-              --project-name friend_post \
-              --org com.friendpost \
-              .
-          else
-            echo "pubspec.yaml found."
+            echo "ERROR: pubspec.yaml is missing."
+            exit 1
           fi
 
-      - name: Verify pubspec
-        run: |
-          set -e
+          if [ ! -d "lib" ]; then
+            echo "ERROR: lib directory is missing."
+            exit 1
+          fi
 
-          echo "========================================"
-          echo "VERIFYING PUBSPEC"
-          echo "========================================"
+          if [ ! -f "lib/main.dart" ]; then
+            echo "ERROR: lib/main.dart is missing."
+            exit 1
+          fi
 
-          test -f pubspec.yaml
+          echo "pubspec.yaml: OK"
+          echo "lib/: OK"
+          echo "lib/main.dart: OK"
 
-          echo "pubspec.yaml found."
-
-      - name: Add required Firebase packages
+      - name: Add Firebase dependencies
         run: |
           set -e
 
@@ -78,27 +73,23 @@ jobs:
           flutter pub add firebase_auth
           flutter pub add cloud_firestore
 
-      - name: Repair Android project
+      - name: Generate missing Android project
         run: |
           set -e
 
           echo "========================================"
-          echo "REPAIRING ANDROID PROJECT"
+          echo "CHECKING ANDROID PROJECT"
           echo "========================================"
 
           if [ ! -f "android/gradlew" ] || \
              [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
 
-            echo "Android Gradle files are missing."
-            echo "Regenerating Flutter Android project files..."
+            echo "Android project files are missing."
+            echo "Generating Android files..."
 
             mkdir -p /tmp/friend_post_backup
 
             cp -r lib /tmp/friend_post_backup/lib
-
-            if [ -f "pubspec.yaml" ]; then
-              cp pubspec.yaml /tmp/friend_post_backup/pubspec.yaml
-            fi
 
             flutter create \
               --platforms=android \
@@ -106,14 +97,11 @@ jobs:
               --org com.friendpost \
               .
 
-            cp -r /tmp/friend_post_backup/lib/* lib/
-
-            if [ -f "/tmp/friend_post_backup/pubspec.yaml" ]; then
-              cp /tmp/friend_post_backup/pubspec.yaml pubspec.yaml
-            fi
+            rm -rf lib
+            cp -r /tmp/friend_post_backup/lib lib
 
           else
-            echo "Android Gradle files already exist."
+            echo "Android project already exists."
           fi
 
       - name: Verify Android project
@@ -121,7 +109,7 @@ jobs:
           set -e
 
           echo "========================================"
-          echo "CHECKING ANDROID PROJECT"
+          echo "VERIFYING ANDROID PROJECT"
           echo "========================================"
 
           if [ ! -f "android/gradlew" ]; then
@@ -130,7 +118,7 @@ jobs:
           fi
 
           if [ ! -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
-            echo "ERROR: Gradle wrapper properties are missing."
+            echo "ERROR: gradle-wrapper.properties is missing."
             exit 1
           fi
 
@@ -139,12 +127,12 @@ jobs:
 
           chmod +x android/gradlew
 
-      - name: Check Firebase configuration
+      - name: Check Firebase options
         run: |
           set -e
 
           echo "========================================"
-          echo "CHECKING FIREBASE CONFIGURATION"
+          echo "CHECKING FIREBASE OPTIONS"
           echo "========================================"
 
           if [ ! -f "lib/firebase_options.dart" ]; then
@@ -154,7 +142,7 @@ jobs:
 
           echo "firebase_options.dart: OK"
 
-      - name: Check Google Services
+      - name: Create Google Services configuration
         run: |
           set -e
 
@@ -163,11 +151,81 @@ jobs:
           echo "========================================"
 
           if [ -f "android/app/google-services.json" ]; then
-            echo "google-services.json: FOUND"
+            echo "google-services.json already exists."
           else
-            echo "WARNING: android/app/google-services.json not found."
-            echo "Firebase Android initialization may require this file."
+            echo "google-services.json is missing."
+            echo "Creating configuration from Firebase project..."
+
+            cat > android/app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "1074705827775",
+              "project_id": "friend-post-fbfdd",
+              "storage_bucket": "friend-post-fbfdd.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:1074705827775:android:68710467504787bc3a430a",
+                  "android_client_info": {
+                    "package_name": "com.friendpost.app"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyAbYCTMxhCJzft1dgnpHDRkbC4v9RMU4GE"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                },
+                "configuration_version": "1"
+              }
+            ]
+          }
+          EOF
+
+            echo "google-services.json created."
           fi
+
+      - name: Configure Android Firebase plugin
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING FIREBASE ANDROID PLUGIN"
+          echo "========================================"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          settings = Path("android/settings.gradle")
+          content = settings.read_text()
+
+          if "com.google.gms.google-services" not in content:
+              content = content.replace(
+                  "plugins {",
+                  "plugins {\n    id 'com.google.gms.google-services' version '4.4.4' apply false",
+                  1
+              )
+              settings.write_text(content)
+
+          app_gradle = Path("android/app/build.gradle")
+          content = app_gradle.read_text()
+
+          if "com.google.gms.google-services" not in content:
+              content = content.replace(
+                  "plugins {",
+                  "plugins {\n    id 'com.google.gms.google-services'",
+                  1
+              )
+              app_gradle.write_text(content)
+
+          print("Firebase Android plugin configured.")
+          PY
 
       - name: Flutter pub get
         run: |
@@ -181,6 +239,8 @@ jobs:
 
       - name: Flutter analyze
         run: |
+          set -e
+
           echo "========================================"
           echo "RUNNING FLUTTER ANALYZE"
           echo "========================================"
@@ -213,8 +273,9 @@ jobs:
           fi
 
           echo ""
+          echo "========================================"
           echo "APK BUILD SUCCESSFUL"
-          echo ""
+          echo "========================================"
 
           ls -lh "$APK"
 
