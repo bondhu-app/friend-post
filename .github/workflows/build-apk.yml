@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v5
 
@@ -63,7 +64,6 @@ jobs:
             --org com.friendpost \
             .
 
-          echo ""
           echo "Android project generated."
 
           test -d android
@@ -72,9 +72,9 @@ jobs:
           test -f android/build.gradle.kts
           test -f android/gradle/wrapper/gradle-wrapper.properties
 
-          echo "Android Kotlin DSL project: OK"
+          echo "Android project: OK"
 
-      - name: Configure Android application
+      - name: Configure Android application ID
         run: |
           set -e
 
@@ -82,11 +82,124 @@ jobs:
           echo "CONFIGURING ANDROID APPLICATION"
           echo "========================================"
 
-          python3 <<'PY'
-          from pathlib import Path
+          sed -i 's/com\.example\.friend_post/com.friendpost.app/g' \
+            android/app/build.gradle.kts
 
-          path = Path("android/app/build.gradle.kts")
-          text = path.read_text()
+          sed -i 's/com\.friendpost\.friend_post/com.friendpost.app/g' \
+            android/app/build.gradle.kts
 
-          replacements = {
-              'com.example.friend_postpost
+          echo "Application ID configured."
+
+          grep -n "namespace" android/app/build.gradle.kts || true
+          grep -n "applicationId" android/app/build.gradle.kts || true
+
+      - name: Create Firebase configuration
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CREATING FIREBASE CONFIGURATION"
+          echo "========================================"
+
+          mkdir -p android/app
+
+          cat > android/app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "1074705827775",
+              "project_id": "friend-post-fbfdd",
+              "storage_bucket": "friend-post-fbfdd.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:1074705827775:android:68710467504787bc3a430a",
+                  "android_client_info": {
+                    "package_name": "com.friendpost.app"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyAbYCTMxhCJzft1dgnpHDRkbC4v9RMU4GE"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+
+          test -f android/app/google-services.json
+
+          echo "google-services.json: OK"
+
+      - name: Configure Google Services plugin
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "CONFIGURING GOOGLE SERVICES PLUGIN"
+          echo "========================================"
+
+          sed -i '/id("com.google.gms.google-services")/d' \
+            android/settings.gradle.kts
+
+          sed -i '/id("com.google.gms.google-services")/d' \
+            android/app/build.gradle.kts
+
+          sed -i '/plugins {/a\    id("com.google.gms.google-services") version "4.4.4" apply false' \
+            android/settings.gradle.kts
+
+          sed -i '/plugins {/a\    id("com.google.gms.google-services")' \
+            android/app/build.gradle.kts
+
+          echo "Google Services plugin added."
+
+      - name: Add Firebase packages
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "ADDING FIREBASE PACKAGES"
+          echo "========================================"
+
+          flutter pub add firebase_core
+          flutter pub add firebase_auth
+          flutter pub add cloud_firestore
+
+          flutter pub get
+
+          echo "Firebase packages installed."
+
+      - name: Verify Firebase packages
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING FIREBASE PACKAGES"
+          echo "========================================"
+
+          grep -q "firebase_core" pubspec.yaml
+          grep -q "firebase_auth" pubspec.yaml
+          grep -q "cloud_firestore" pubspec.yaml
+
+          echo "firebase_core: OK"
+          echo "firebase_auth: OK"
+          echo "cloud_firestore: OK"
+
+      - name: Verify Android configuration
+        run: |
+          set -e
+
+          echo "========================================"
+          echo "VERIFYING ANDROID CONFIGURATION"
+          echo "========================================"
+
+          test -f android/settings.gradle.kts
+          test -f android/build
