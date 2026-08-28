@@ -12,10 +12,11 @@ permissions:
 
 jobs:
   build:
+    name: Build Friend Post
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -30,37 +31,21 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Show repository
+      - name: Verify Flutter source
         run: |
           set -e
 
           echo "========================================"
-          echo "FRIEND POST REPOSITORY"
-          echo "========================================"
-
-          pwd
-          echo ""
-
-          echo "Root files:"
-          ls -la
-
-          echo ""
-          echo "Workflow:"
-          ls -la .github/workflows || true
-
-      - name: Verify source
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING SOURCE"
+          echo "VERIFYING FRIEND POST SOURCE"
           echo "========================================"
 
           test -f pubspec.yaml
           test -f lib/main.dart
+          test -f lib/firebase_options.dart
 
-          echo "pubspec.yaml FOUND"
-          echo "lib/main.dart FOUND"
+          echo "pubspec.yaml: OK"
+          echo "lib/main.dart: OK"
+          echo "lib/firebase_options.dart: OK"
 
       - name: Generate Android project
         run: |
@@ -82,187 +67,48 @@ jobs:
           echo "Android project generated."
 
           test -d android
-          test -f android/settings.gradle
-          test -f android/app/build.gradle
-          test -f android/gradlew
+          test -f android/settings.gradle.kts
+          test -f android/app/build.gradle.kts
+          test -f android/build.gradle.kts
           test -f android/gradle/wrapper/gradle-wrapper.properties
 
-          chmod +x android/gradlew
+          echo "Android Kotlin DSL project: OK"
 
-          echo ""
-          echo "ANDROID PROJECT READY"
-
-      - name: Configure application ID
+      - name: Configure Android application
         run: |
           set -e
 
           echo "========================================"
-          echo "CONFIGURING APPLICATION ID"
+          echo "CONFIGURING ANDROID APPLICATION"
           echo "========================================"
 
           python3 <<'PY'
           from pathlib import Path
 
-          p = Path("android/app/build.gradle")
-          text = p.read_text()
+          path = Path("android/app/build.gradle.kts")
+          text = path.read_text()
 
           text = text.replace(
-              "com.example.friend_post",
-              "com.friendpost.app"
+              'namespace = "com.friendpost.friend_post"',
+              'namespace = "com.friendpost.app"'
           )
 
-          p.write_text(text)
+          text = text.replace(
+              'namespace = "com.example.friend_post"',
+              'namespace = "com.friendpost.app"'
+          )
 
-          print("Application ID configured.")
+          text = text.replace(
+              'applicationId = "com.friendpost.friend_post"',
+              'applicationId = "com.friendpost.app"'
+          )
+
+          text = text.replace(
+              'applicationId = "com.example.friend_post"',
+              'applicationId = "com.friendpost.app"'
+          )
+
+          path.write_text(text)
+
+          print("Android application configured.")
           PY
-
-      - name: Configure Firebase
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CONFIGURING FIREBASE"
-          echo "========================================"
-
-          mkdir -p android/app
-
-          cat > android/app/google-services.json <<'EOF'
-          {
-            "project_info": {
-              "project_number": "1074705827775",
-              "project_id": "friend-post-fbfdd",
-              "storage_bucket": "friend-post-fbfdd.firebasestorage.app"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:1074705827775:android:68710467504787bc3a430a",
-                  "android_client_info": {
-                    "package_name": "com.friendpost.app"
-                  }
-                },
-                "oauth_client": [],
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyAbYCTMxhCJzft1dgnpHDRkbC4v9RMU4GE"
-                  }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": []
-                  }
-                },
-                "configuration_version": "1"
-              }
-            ]
-          }
-          EOF
-
-          echo "google-services.json created."
-
-      - name: Configure Google Services plugin
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "CONFIGURING GOOGLE SERVICES"
-          echo "========================================"
-
-          python3 <<'PY'
-          from pathlib import Path
-
-          settings = Path("android/settings.gradle")
-          app = Path("android/app/build.gradle")
-
-          s = settings.read_text()
-          a = app.read_text()
-
-          if "com.google.gms.google-services" not in s:
-              s = s.replace(
-                  "plugins {",
-                  "plugins {\n    id 'com.google.gms.google-services' version '4.4.4' apply false",
-                  1
-              )
-
-          if "com.google.gms.google-services" not in a:
-              a = a.replace(
-                  "plugins {",
-                  "plugins {\n    id 'com.google.gms.google-services'",
-                  1
-              )
-
-          settings.write_text(s)
-          app.write_text(a)
-
-          print("Google Services configured.")
-          PY
-
-      - name: Add Firebase packages
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "ADDING FIREBASE PACKAGES"
-          echo "========================================"
-
-          flutter pub add firebase_core
-          flutter pub add firebase_auth
-          flutter pub add cloud_firestore
-
-          flutter pub get
-
-      - name: Verify Firebase options
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING FIREBASE OPTIONS"
-          echo "========================================"
-
-          test -f lib/firebase_options.dart
-
-          echo "firebase_options.dart FOUND"
-
-      - name: Flutter analyze
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "RUNNING FLUTTER ANALYZE"
-          echo "========================================"
-
-          flutter analyze
-
-      - name: Build APK
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "BUILDING FRIEND POST APK"
-          echo "========================================"
-
-          flutter build apk --release
-
-      - name: Verify APK
-        run: |
-          set -e
-
-          echo "========================================"
-          echo "VERIFYING APK"
-          echo "========================================"
-
-          test -f build/app/outputs/flutter-apk/app-release.apk
-
-          ls -lh build/app/outputs/flutter-apk/app-release.apk
-
-          echo ""
-          echo "========================================"
-          echo "SUCCESS"
-          echo "========================================"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: friend-post-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
